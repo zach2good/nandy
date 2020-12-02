@@ -95,20 +95,21 @@ void Window::Draw(Simulation& sim)
     ImGui::Begin("MainWindow");
     {
         ImGui::Text("clk state: %i", sim.GetNode("clk")->active);
-        ImGui::Text("input state: %i", sim.GetNode("input")->active);
+        ImGui::Text("input0 state: %i", sim.GetNode("input0")->active);
+        ImGui::Text("input1 state: %i", sim.GetNode("input1")->active);
         ImGui::Text("output state: %i", sim.GetNode("output")->active);
         ImGui::Text("steps: %i", sim.step_count);
 
-        if (ImGui::Button("Toggle clk"))
+        if (ImGui::Button("Toggle input0"))
         {
-            auto clk = sim.GetNode("clk");
-            clk->active = !clk->active;
+            auto input = sim.GetNode("input0");
+            input->active = !input->active;
             sim.Step();
         }
 
-        if (ImGui::Button("Toggle input"))
+        if (ImGui::Button("Toggle input1"))
         {
-            auto input = sim.GetNode("input");
+            auto input = sim.GetNode("input1");
             input->active = !input->active;
             sim.Step();
         }

@@ -32,75 +32,183 @@ TEST(BasicTests, CheckConstants)
     EXPECT_TRUE(output != nullptr);
 }
 
-TEST(BasicTests, SingleTransistor)
+TEST(BasicTests, BasicNodeTest)
 {
     Simulation sim;
 
     auto vcc = sim.GetNode("vcc");
-    auto gnd = sim.GetNode("gnd");
-    auto input = sim.GetNode("input");
     auto output = sim.GetNode("output");
 
-    auto t = sim.NewTransistor();
-
-    EXPECT_TRUE(t != nullptr);
-
-    sim.ConnectNodes(vcc, t->input_node);
-    sim.ConnectNodes(input, t->enable_node);
-    sim.ConnectNodes(t->output_node, output);
-
-    input->active = false;
-    sim.Step();
-
-    EXPECT_FALSE(output->active);
-
-    input->active = true;
+    sim.ConnectNodes(vcc, output);
+    
     sim.Step();
 
     EXPECT_TRUE(output->active);
 }
 
-TEST(BasicTests, ANDGate)
+TEST(BasicTests, SequentialNodesTest)
+{
+    Simulation sim;
+
+    auto vcc = sim.GetNode("vcc");
+    auto n0 = sim.NewNode("n0");
+    auto n1 = sim.NewNode("n1");
+    auto output = sim.GetNode("output");
+
+    sim.ConnectNodes(vcc, n0);
+    sim.ConnectNodes(n0, n1);
+    sim.ConnectNodes(n1, output);
+
+    sim.Step();
+
+    EXPECT_TRUE(output->active);
+}
+
+TEST(BasicTests, ParallelNodesTest)
+{
+    Simulation sim;
+
+    auto vcc = sim.GetNode("vcc");
+    
+    auto n0 = sim.NewNode("n0");
+    auto n1 = sim.NewNode("n1");
+    auto n2 = sim.NewNode("n2");
+
+    auto n3 = sim.NewNode("n3");
+    auto n4 = sim.NewNode("n4");
+    auto n5 = sim.NewNode("n5");
+
+    sim.ConnectNodes(vcc, n0);
+    sim.ConnectNodes(vcc, n1);
+    sim.ConnectNodes(vcc, n2);
+
+    sim.ConnectNodes(n0, n3);
+    sim.ConnectNodes(n1, n4);
+    sim.ConnectNodes(n2, n5);
+
+    sim.Step();
+
+    EXPECT_TRUE(n3->active);
+    EXPECT_TRUE(n4->active);
+    EXPECT_TRUE(n5->active);
+}
+
+TEST(BasicTests, BasicNANDTest_High_High)
+{
+    Simulation sim;
+
+    auto input0 = sim.GetNode("input0");
+    auto input1 = sim.GetNode("input1");
+    auto nand = sim.NewNAND("nand");
+    auto output = sim.GetNode("output");
+
+    sim.ConnectNodes(input0, nand->inputA_node);
+    sim.ConnectNodes(input1, nand->inputB_node);
+    sim.ConnectNodes(nand->output_node, output);
+
+    // High + High = Low
+    sim.SetActive(input0, true);
+    sim.SetActive(input1, true);
+
+    sim.Step();
+
+    EXPECT_FALSE(output->active);
+}
+
+TEST(BasicTests, BasicNANDTest_Low_Low)
+{
+    Simulation sim;
+
+    auto input0 = sim.GetNode("input0");
+    auto input1 = sim.GetNode("input1");
+    auto nand = sim.NewNAND("nand");
+    auto output = sim.GetNode("output");
+
+    sim.ConnectNodes(input0, nand->inputA_node);
+    sim.ConnectNodes(input1, nand->inputB_node);
+    sim.ConnectNodes(nand->output_node, output);
+
+    // Low + Low = High
+    sim.SetActive(input0, false);
+    sim.SetActive(input1, false);
+
+    sim.Step();
+
+    EXPECT_TRUE(output->active);
+}
+
+TEST(BasicTests, BasicNANDTest_Low_High)
+{
+    Simulation sim;
+
+    auto input0 = sim.GetNode("input0");
+    auto input1 = sim.GetNode("input1");
+    auto nand = sim.NewNAND("nand");
+    auto output = sim.GetNode("output");
+
+    sim.ConnectNodes(input0, nand->inputA_node);
+    sim.ConnectNodes(input1, nand->inputB_node);
+    sim.ConnectNodes(nand->output_node, output);
+
+    // Low + High = High
+    sim.SetActive(input0, false);
+    sim.SetActive(input1, true);
+
+    sim.Step();
+
+    EXPECT_TRUE(output->active);
+}
+
+TEST(BasicTests, BasicNANDTest_High_Low)
+{
+    Simulation sim;
+
+    auto input0 = sim.GetNode("input0");
+    auto input1 = sim.GetNode("input1");
+    auto nand = sim.NewNAND("nand");
+    auto output = sim.GetNode("output");
+
+    sim.ConnectNodes(input0, nand->inputA_node);
+    sim.ConnectNodes(input1, nand->inputB_node);
+    sim.ConnectNodes(nand->output_node, output);
+
+    // High + Low = High
+    sim.SetActive(input0, true);
+    sim.SetActive(input1, false);
+
+    sim.Step();
+
+    EXPECT_TRUE(output->active);
+}
+
+TEST(BasicTests, ChainedNANDsTest)
 {
     Simulation sim;
 
     auto vcc = sim.GetNode("vcc");
     auto gnd = sim.GetNode("gnd");
-    auto input0 = sim.GetNode("input0");
-    auto input1 = sim.GetNode("input1");
+    auto nand0 = sim.NewNAND();
+    auto nand1 = sim.NewNAND();
+    auto nand2 = sim.NewNAND();
     auto output = sim.GetNode("output");
 
-    auto t0 = sim.NewTransistor();
-    auto t1 = sim.NewTransistor();
+    // High + High = Low
+    sim.ConnectNodes(vcc, nand0->inputA_node);
+    sim.ConnectNodes(vcc, nand0->inputB_node);
 
-    EXPECT_TRUE(t0 != nullptr);
-    EXPECT_TRUE(t1 != nullptr);
+    // Low + Low = High
+    sim.ConnectNodes(gnd, nand1->inputA_node);
+    sim.ConnectNodes(gnd, nand1->inputB_node);
 
-    sim.ConnectNodes(vcc, t0->input_node);
+    // Low + High = High
+    sim.ConnectNodes(nand0->output_node, nand2->inputA_node);
+    sim.ConnectNodes(nand1->output_node, nand2->inputB_node);
 
-    sim.ConnectNodes(input0, t0->enable_node);
-    sim.ConnectNodes(input1, t1->enable_node);
-
-    sim.ConnectNodes(t0->output_node, t1->input_node);
-
-    sim.ConnectNodes(t1->output_node, output);
+    sim.ConnectNodes(nand2->output_node, output);
 
     sim.Step();
 
-    EXPECT_FALSE(output->active);
-
-    input0->active = true;
-    sim.Step();
-
-    EXPECT_FALSE(output->active);
-
-    input1->active = true;
-    sim.Step();
-
+    EXPECT_FALSE(nand0->output_node->active);
+    EXPECT_TRUE(nand1->output_node->active);
     EXPECT_TRUE(output->active);
-
-    input0->active = false;
-    sim.Step();
-
-    EXPECT_FALSE(output->active);
 }

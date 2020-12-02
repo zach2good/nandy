@@ -2,40 +2,82 @@
 
 #include <chrono>
 #include <memory>
+#include <queue>
 #include <unordered_map>
 #include <vector>
 
 struct node_t;
-struct wire_t;
-struct transistor_t;
+struct nand_t;
 
-struct node_t
+struct component_t
+{
+    virtual ~component_t() = default;
+    virtual void Simulate(std::queue<std::shared_ptr<component_t>>* q) = 0;
+};
+
+struct node_t : public component_t
 {
     uint16_t id;
     std::string name;
 
-    std::vector<std::shared_ptr<wire_t>> connected_wires;
+    std::vector<std::shared_ptr<node_t>> connected_nodes;
+    std::shared_ptr<nand_t> connected_nand;
 
+    bool dirty = true;
     bool active = false;
     bool locked = false;
+
+    void Simulate(std::queue<std::shared_ptr<component_t>>* q) override
+    {
+        if (this->dirty)
+        {
+            for (auto& connected_node : connected_nodes)
+            {
+                if (!connected_node->locked)
+                {
+                    connected_node->active = this->active;
+                    connected_node->dirty = true;
+
+                    q->push(connected_node);
+                }
+            }
+
+            if (connected_nand != nullptr)
+            {
+                q->push(std::static_pointer_cast<component_t>(connected_nand));
+            }
+
+            this->dirty = false;
+        }
+    }
 };
 
-struct wire_t
+struct nand_t : public component_t
 {
     uint16_t id;
     std::string name;
 
-    std::vector<std::shared_ptr<node_t>> nodes;
-};
-
-struct transistor_t
-{
-    uint16_t id;
-    std::string name;
-
-    std::shared_ptr<node_t> input_node;
+    std::shared_ptr<node_t> inputA_node;
+    std::shared_ptr<node_t> inputB_node;
     std::shared_ptr<node_t> output_node;
-    std::shared_ptr<node_t> enable_node;
+
+    bool dirty = true;
+
+    void Simulate(std::queue<std::shared_ptr<component_t>>* q) override
+    {
+        if (this->dirty)
+        {
+            bool starting_output_state = this->output_node->active;
+            bool next_output_state = !(this->inputA_node->active && this->inputB_node->active);
+            
+            this->output_node->active = next_output_state;
+            this->output_node->dirty = true;
+
+            q->push(this->output_node);
+            
+            this->dirty = false;
+        }
+    }
 };
 
 class Simulation
@@ -73,9 +115,6 @@ public:
         auto output0 = NewNode("output0");
 
         auto output1 = NewNode("output1");
-
-        // Looks good? *Clicks tongs a few times*
-        Step();
     }
 
     ~Simulation() = default;
@@ -83,48 +122,33 @@ public:
     void Step()
     {
         auto start_time = std::chrono::high_resolution_clock::now();
-
-        for (size_t i = 0; i < 2; i++)
+        for (size_t i = 0; i < 4; i++)
         {
             for (auto& node : nodes)
             {
-                for (auto& wire : node->connected_wires)
-                {
-                }
+                node->dirty = true;
             }
-
-            for (auto& wire : wires)
+            
+            for (auto& nand : nands)
             {
-                bool activeState = false;
-                for (auto& node : wire->nodes)
-                {
-                    if (node->active)
-                    {
-                        activeState = true;
-                    }
-                }
-
-                for (auto& node : wire->nodes)
-                {
-                    if (!node->locked && activeState)
-                    {
-                        node->active = activeState;
-                    }
-                }
+                nand->dirty = true;
             }
+            
+            q.push(GetNode("vcc"));
+            q.push(GetNode("clk"));
+            q.push(GetNode("input"));
+            q.push(GetNode("input0"));
+            q.push(GetNode("input1"));
 
-            for (auto& transistor : transistors)
+            while (!q.empty())
             {
-                if (transistor->enable_node->active)
-                {
-                    transistor->output_node->active = transistor->input_node->active;
-                }
-                else
-                {
-                    transistor->output_node->active = false;
-                }
+                auto& component = q.front();
+                q.pop();
+                
+                component->Simulate(&q);
             }
         }
+
         auto end_time = std::chrono::high_resolution_clock::now();
         auto time_taken = end_time - start_time;
         auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(time_taken);
@@ -157,77 +181,54 @@ public:
         return node_lookup[name];
     }
 
-    std::shared_ptr<wire_t> NewWire(std::string name = "")
+    std::shared_ptr<nand_t> NewNAND(std::string name = "")
     {
-        auto wire = std::make_shared<wire_t>();
-        wires.emplace_back(wire);
-        wire->id = wires.size() - 1;
-
-        if (!name.empty())
-        {
-            wire->name = name;
-            wire_lookup[name] = wire;
-        }
-
-        return wire;
-    }
-
-    std::shared_ptr<wire_t> GetWire(uint16_t id)
-    {
-        return wires[id];
-    }
-
-    std::shared_ptr<wire_t> GetWire(std::string name)
-    {
-        return wire_lookup[name];
-    }
-
-    std::shared_ptr<transistor_t> NewTransistor(std::string name = "")
-    {
-        auto transistor = std::make_shared<transistor_t>();
-        transistors.emplace_back(transistor);
-        transistor->id = transistors.size() - 1;
-
-        // Intel 8086: 29,000 transistors
-        if (transistors.size() > 29'000)
-        {
-            throw "Intel 8086 Transistor Limit (29,000) exceeded!";
-        }
+        auto nand = std::make_shared<nand_t>();
+        nands.emplace_back(nand);
+        nand->id = nands.size() - 1;
 
         // Attach Nodes
-        transistor->input_node = NewNode();
-        transistor->output_node = NewNode();
-        transistor->enable_node = NewNode();
+        nand->inputA_node = NewNode();
+        nand->inputB_node = NewNode();
+        nand->output_node = NewNode();
+
+        nand->inputA_node->connected_nand = nand;
+        nand->inputB_node->connected_nand = nand;
+        nand->output_node->connected_nand = nand;
+
+        nand->output_node->active = true;
 
         if (!name.empty())
         {
-            transistor->name = name;
-            transistor_lookup[name] = transistor;
+            nand->name = name;
+            nand_lookup[name] = nand;
         }
 
-        return transistor;
+        return nand;
     }
 
-    std::shared_ptr<transistor_t> GetTransistor(uint16_t id)
+    std::shared_ptr<nand_t> GetTransistor(uint16_t id)
     {
-        return transistors[id];
+        return nands[id];
     }
 
-    std::shared_ptr<transistor_t> GetTransistor(std::string name)
+    std::shared_ptr<nand_t> GetTransistor(std::string name)
     {
-        return transistor_lookup[name];
+        return nand_lookup[name];
     }
 
     void ConnectNodes(std::shared_ptr<node_t> n0, std::shared_ptr<node_t> n1)
     {
-        std::shared_ptr<wire_t> wire = NewWire();
-
-        wire->nodes.emplace_back(n0);
-        wire->nodes.emplace_back(n1);
-
-        n0->connected_wires.emplace_back(wire);
-        n1->connected_wires.emplace_back(wire);
+        n0->connected_nodes.emplace_back(n1);
     };
+
+    
+    void SetActive(std::shared_ptr<node_t> n, bool new_active)
+    {
+        n->active = new_active;
+        n->dirty = true;
+        q.push(n);
+    }
 
     // Step Information
     long step_count = 0;
@@ -235,11 +236,11 @@ public:
 
 private:
     // Components
-    std::vector<std::shared_ptr<transistor_t>> transistors;
-    std::vector<std::shared_ptr<wire_t>> wires;
+    std::vector<std::shared_ptr<nand_t>> nands;
     std::vector<std::shared_ptr<node_t>> nodes;
-
-    std::unordered_map<std::string, std::shared_ptr<transistor_t>> transistor_lookup;
-    std::unordered_map<std::string, std::shared_ptr<wire_t>> wire_lookup;
+    std::unordered_map<std::string, std::shared_ptr<nand_t>> nand_lookup;
     std::unordered_map<std::string, std::shared_ptr<node_t>> node_lookup;
+
+    // Simulation
+    std::queue<std::shared_ptr<component_t>> q;
 };

@@ -1,5 +1,7 @@
-#include "basic_tests.h"
 #include "gtest/gtest.h"
+
+#include "basic_tests.h"
+#include "compound_component_tests.h"
 
 int main(int argc, char** argv)
 {
