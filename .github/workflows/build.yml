@@ -1,0 +1,64 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  Linux_Build_Clang_64bit:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y software-properties-common cmake
+        git submodule update --init --recursive
+    - name: Configure CMake
+      run: |
+        export CC=/usr/bin/clang
+        export CXX=/usr/bin/clang++
+        cmake .
+    - name: Build
+      run: |
+        make -j $(nproc)
+    - name: Run Tests
+      run: |
+        ./test/nandy_tests
+
+  Linux_Build_GCC_64bit:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y software-properties-common cmake
+        git submodule update --init --recursive
+    - name: Configure CMake
+      run: |
+        export CC=/usr/bin/gcc
+        export CXX=/usr/bin/g++
+        cmake .
+    - name: Build
+      run: |
+        make -j $(nproc)
+
+  Windows_Build_2019_64bit:
+    runs-on: windows-2019
+    env:
+      MSBUILD_PATH: C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: |
+        git submodule update --init --recursive
+    - name: Configure CMake
+      shell: cmd
+      run: |
+        cmake -A x64 .
+    - name: Build
+      shell: cmd
+      run: |
+        cmake --build .
