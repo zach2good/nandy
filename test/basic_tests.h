@@ -32,7 +32,7 @@ TEST(BasicTests, CheckConstants)
     EXPECT_TRUE(output != nullptr);
 }
 
-TEST(BasicTests, BasicNodeTest)
+TEST(BasicTests, BasicNode)
 {
     Simulation sim;
 
@@ -46,7 +46,7 @@ TEST(BasicTests, BasicNodeTest)
     EXPECT_TRUE(output->active);
 }
 
-TEST(BasicTests, SequentialNodesTest)
+TEST(BasicTests, SequentialNodes)
 {
     Simulation sim;
 
@@ -64,7 +64,7 @@ TEST(BasicTests, SequentialNodesTest)
     EXPECT_TRUE(output->active);
 }
 
-TEST(BasicTests, ParallelNodesTest)
+TEST(BasicTests, ParallelNodes)
 {
     Simulation sim;
 
@@ -93,7 +93,7 @@ TEST(BasicTests, ParallelNodesTest)
     EXPECT_TRUE(n5->active);
 }
 
-TEST(BasicTests, BasicNANDTest_High_High)
+TEST(BasicTests, BasicNAND_High_High)
 {
     Simulation sim;
 
@@ -115,7 +115,7 @@ TEST(BasicTests, BasicNANDTest_High_High)
     EXPECT_FALSE(output->active);
 }
 
-TEST(BasicTests, BasicNANDTest_Low_Low)
+TEST(BasicTests, BasicNAND_Low_Low)
 {
     Simulation sim;
 
@@ -137,7 +137,7 @@ TEST(BasicTests, BasicNANDTest_Low_Low)
     EXPECT_TRUE(output->active);
 }
 
-TEST(BasicTests, BasicNANDTest_Low_High)
+TEST(BasicTests, BasicNAND_Low_High)
 {
     Simulation sim;
 
@@ -159,7 +159,7 @@ TEST(BasicTests, BasicNANDTest_Low_High)
     EXPECT_TRUE(output->active);
 }
 
-TEST(BasicTests, BasicNANDTest_High_Low)
+TEST(BasicTests, BasicNAND_High_Low)
 {
     Simulation sim;
 
@@ -181,7 +181,7 @@ TEST(BasicTests, BasicNANDTest_High_Low)
     EXPECT_TRUE(output->active);
 }
 
-TEST(BasicTests, ChainedNANDsTest)
+TEST(BasicTests, ChainedNANDs)
 {
     Simulation sim;
 

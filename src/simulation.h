@@ -6,79 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-struct node_t;
-struct nand_t;
-
-struct component_t
-{
-    virtual ~component_t() = default;
-    virtual void Simulate(std::queue<std::shared_ptr<component_t>>* q) = 0;
-};
-
-struct node_t : public component_t
-{
-    uint16_t id;
-    std::string name;
-
-    std::vector<std::shared_ptr<node_t>> connected_nodes;
-    std::shared_ptr<nand_t> connected_nand;
-
-    bool dirty = true;
-    bool active = false;
-    bool locked = false;
-
-    void Simulate(std::queue<std::shared_ptr<component_t>>* q) override
-    {
-        if (this->dirty)
-        {
-            for (auto& connected_node : connected_nodes)
-            {
-                if (!connected_node->locked)
-                {
-                    connected_node->active = this->active;
-                    connected_node->dirty = true;
-
-                    q->push(connected_node);
-                }
-            }
-
-            if (connected_nand != nullptr)
-            {
-                q->push(std::static_pointer_cast<component_t>(connected_nand));
-            }
-
-            this->dirty = false;
-        }
-    }
-};
-
-struct nand_t : public component_t
-{
-    uint16_t id;
-    std::string name;
-
-    std::shared_ptr<node_t> inputA_node;
-    std::shared_ptr<node_t> inputB_node;
-    std::shared_ptr<node_t> output_node;
-
-    bool dirty = true;
-
-    void Simulate(std::queue<std::shared_ptr<component_t>>* q) override
-    {
-        if (this->dirty)
-        {
-            bool starting_output_state = this->output_node->active;
-            bool next_output_state = !(this->inputA_node->active && this->inputB_node->active);
-            
-            this->output_node->active = next_output_state;
-            this->output_node->dirty = true;
-
-            q->push(this->output_node);
-            
-            this->dirty = false;
-        }
-    }
-};
+#include "definitions.h"
 
 class Simulation
 {
@@ -87,34 +15,39 @@ public:
     {
         // Define High Constants
         auto vcc = NewNode("vcc");
-
-        vcc->active = true;
-        vcc->locked = true;
+        AddConstant(vcc, true, true);
 
         // Define Low Constants
         auto gnd = NewNode("gnd");
-
-        gnd->active = false;
-        gnd->locked = true;
+        AddConstant(gnd, true, false);
 
         // Define Others
         auto clk = NewNode("clk");
-        clk->locked = true;
+        AddConstant(clk, true, false);
 
         auto input = NewNode("input");
-        input->locked = true;
+        AddConstant(input, true, false);
 
         auto input0 = NewNode("input0");
-        input0->locked = true;
+        AddConstant(input0, true, false);
 
         auto input1 = NewNode("input1");
-        input1->locked = true;
+        AddConstant(input1, true, false);
+
+        auto input2 = NewNode("input2");
+        AddConstant(input2, true, false);
 
         auto output = NewNode("output");
+        AddConstant(output, false, false);
 
         auto output0 = NewNode("output0");
+        AddConstant(output0, false, false);
 
         auto output1 = NewNode("output1");
+        AddConstant(output1, false, false);
+
+        auto output2 = NewNode("output2");
+        AddConstant(output2, false, false);
     }
 
     ~Simulation() = default;
@@ -122,7 +55,7 @@ public:
     void Step()
     {
         auto start_time = std::chrono::high_resolution_clock::now();
-        for (size_t i = 0; i < 4; i++)
+        for (size_t i = 0; i < 4; i++) // TODO: Reduce this to as small as possible
         {
             for (auto& node : nodes)
             {
@@ -133,22 +66,24 @@ public:
             {
                 nand->dirty = true;
             }
-            
-            q.push(GetNode("vcc"));
-            q.push(GetNode("clk"));
-            q.push(GetNode("input"));
-            q.push(GetNode("input0"));
-            q.push(GetNode("input1"));
+
+            for (auto& constant : constants)
+            {
+                q.push(constant);
+            }
 
             while (!q.empty())
             {
                 auto& component = q.front();
                 q.pop();
                 
-                component->Simulate(&q);
+                if (component->dirty)
+                {
+                    component->Simulate(&q);
+                    component->dirty = false;
+                }
             }
         }
-
         auto end_time = std::chrono::high_resolution_clock::now();
         auto time_taken = end_time - start_time;
         auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(time_taken);
@@ -161,6 +96,7 @@ public:
         auto node = std::make_shared<node_t>();
         nodes.emplace_back(node);
         node->id = nodes.size() - 1;
+        node->self = node;
 
         if (!name.empty())
         {
@@ -186,6 +122,7 @@ public:
         auto nand = std::make_shared<nand_t>();
         nands.emplace_back(nand);
         nand->id = nands.size() - 1;
+        nand->self = nand;
 
         // Attach Nodes
         nand->inputA_node = NewNode();
@@ -230,6 +167,13 @@ public:
         q.push(n);
     }
 
+    void AddConstant(std::shared_ptr<component_t> component, bool locked, bool active)
+    {
+        component->locked = locked;
+        component->active = active;
+        constants.emplace_back(component);
+    }
+
     // Step Information
     long step_count = 0;
     long long step_time = 0;
@@ -243,4 +187,5 @@ private:
 
     // Simulation
     std::queue<std::shared_ptr<component_t>> q;
+    std::vector<std::shared_ptr<component_t>> constants;
 };
