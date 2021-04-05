@@ -30,3 +30,4 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory(ext)
 add_subdirectory(src)
+add_subdirectory(test)
