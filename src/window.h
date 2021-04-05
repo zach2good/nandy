@@ -37,7 +37,7 @@ public:
     };
 
 private:
-    void CherryTheme();
+    static void CherryTheme();
 
     bool done = false;
     SDL_Window* window;

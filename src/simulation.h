@@ -33,13 +33,13 @@ public:
 
         // NOT
         auto n0 = NewNode(500, 250, "n0");
-        auto not = NewNAND(600, 300, "not");
+        auto n1 = NewNAND(600, 300, "not");
         auto p1 = NewNode(700, 332, "p1");
 
         ConnectNodes(c0, n0);
-        ConnectNodes(n0, not ->inputA_node);
-        ConnectNodes(n0, not ->inputB_node);
-        ConnectNodes(not ->output_node, p1);
+        ConnectNodes(n0, n1->inputA_node);
+        ConnectNodes(n0, n1->inputB_node);
+        ConnectNodes(n1->output_node, p1);
 
         Step();
     }

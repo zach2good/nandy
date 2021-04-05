@@ -25,7 +25,7 @@ Window::Window()
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     window = SDL_CreateWindow("nandy", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
     gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
@@ -87,20 +87,20 @@ void Window::Draw(Simulation& sim)
     // TODO: Don't hardcode sizes
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(1280, 720));
-    ImGui::Begin("MAIN_WINDOW", 0, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_MenuBar);
+    ImGui::Begin("MAIN_WINDOW", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_MenuBar);
     {
         Frame_Toolbar(sim);
 
-        ImGui::Text("Step Count: %d", sim.step_count);
+        ImGui::Text("Step Count: %ld", sim.step_count);
 
         ImGui::SameLine();
-        ImGui::Text("| Step Time: %dus", sim.step_time);
+        ImGui::Text("| Step Time: %lldus", sim.step_time);
 
         ImGui::SameLine();
-        ImGui::Text("| Nodes: %d", sim.nodes.size());
+        ImGui::Text("| Nodes: %zu", sim.nodes.size());
 
         ImGui::SameLine();
-        ImGui::Text("| NANDs: %d", sim.nands.size());
+        ImGui::Text("| NANDs: %zu", sim.nands.size());
 
         if (ImGui::Button("Step"))
         {
@@ -127,9 +127,6 @@ void Window::Draw(Simulation& sim)
         static float sz = 64.0f;
         static float thickness = 2.0f;
         const auto p = ImGui::GetCursorPos();
-        float root_x = p.x + 10.0f;
-        float root_y = p.y;
-        float spacing = 8.0f;
 
         // TODO: Globalize this
         const ImU32 red = ImColor(ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
@@ -268,7 +265,7 @@ void Window::Draw(Simulation& sim)
 
         for (auto& node : sim.nodes)
         {
-            draw_list->AddText(NULL, 0.0f, ImVec2(node->x, node->y), node->active ? yellow : grey, node->active ? "1" : "0");
+            draw_list->AddText(nullptr, 0.0f, ImVec2(node->x, node->y), node->active ? yellow : grey, node->active ? "1" : "0");
             for (auto& driven : node->driving)
             {
                 draw_list->AddLine(ImVec2(node->x, node->y), ImVec2(driven->x, driven->y), node->active ? yellow : grey, thickness);
