@@ -13,55 +13,50 @@ class Simulation
 public:
     Simulation()
     {
-        // Define High Constants
-        auto vcc = NewNode("vcc");
-        AddConstant(vcc, true, true);
+        // Hard-coded sim for testing
+        // NAND
+        auto nand = NewNAND(300, 300, "nand");
 
-        // Define Low Constants
-        auto gnd = NewNode("gnd");
-        AddConstant(gnd, true, false);
+        auto c0 = NewNode(200, 250, "c0");
+        c0->active = true;
+        c0->locked = true;
 
-        // Define Others
-        auto clk = NewNode("clk");
-        AddConstant(clk, true, false);
+        auto c1 = NewNode(200, 400, "c1");
+        c1->active = false;
+        c1->locked = true;
 
-        auto input = NewNode("input");
-        AddConstant(input, true, false);
+        auto p0 = NewNode(400, 332, "p0");
 
-        auto input0 = NewNode("input0");
-        AddConstant(input0, true, false);
+        ConnectNodes(c0, nand->inputA_node);
+        ConnectNodes(c1, nand->inputB_node);
+        ConnectNodes(nand->output_node, p0);
 
-        auto input1 = NewNode("input1");
-        AddConstant(input1, true, false);
+        // NOT
+        auto n0 = NewNode(500, 250, "n0");
+        auto not = NewNAND(600, 300, "not");
+        auto p1 = NewNode(700, 332, "p1");
 
-        auto input2 = NewNode("input2");
-        AddConstant(input2, true, false);
+        ConnectNodes(c0, n0);
+        ConnectNodes(n0, not ->inputA_node);
+        ConnectNodes(n0, not ->inputB_node);
+        ConnectNodes(not ->output_node, p1);
 
-        auto output = NewNode("output");
-        AddConstant(output, false, false);
-
-        auto output0 = NewNode("output0");
-        AddConstant(output0, false, false);
-
-        auto output1 = NewNode("output1");
-        AddConstant(output1, false, false);
-
-        auto output2 = NewNode("output2");
-        AddConstant(output2, false, false);
+        Step();
     }
 
     ~Simulation() = default;
 
     void Step()
     {
+        // TODO: This is accurate, but inefficient
+        for (auto& node : nodes)
+        {
+            q.push(node);
+        }
+
         auto start_time = std::chrono::high_resolution_clock::now();
         for (size_t i = 0; i < 4; i++) // TODO: Reduce this to as small as possible
         {
-            for (auto& constant : constants)
-            {
-                q.push(constant);
-            }
-
             while (!q.empty())
             {
                 auto& component = q.front();
@@ -72,12 +67,12 @@ public:
         }
         auto end_time = std::chrono::high_resolution_clock::now();
         auto time_taken = end_time - start_time;
-        auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(time_taken);
-        step_time = milliseconds.count();
+        auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(time_taken);
+        step_time = microseconds.count();
         ++step_count;
     }
 
-    std::shared_ptr<node_t> NewNode(std::string name = "")
+    std::shared_ptr<node_t> NewNode(int x, int y, std::string name = "")
     {
         auto node = std::make_shared<node_t>();
         nodes.emplace_back(node);
@@ -89,6 +84,9 @@ public:
             node->name = name;
             node_lookup[name] = node;
         }
+
+        node->x = x;
+        node->y = y;
 
         return node;
     }
@@ -103,7 +101,7 @@ public:
         return node_lookup[name];
     }
 
-    std::shared_ptr<nand_t> NewNAND(std::string name = "")
+    std::shared_ptr<nand_t> NewNAND(int x, int y, std::string name = "")
     {
         auto nand = std::make_shared<nand_t>();
         nands.emplace_back(nand);
@@ -111,9 +109,9 @@ public:
         nand->self = nand;
 
         // Attach Nodes
-        nand->inputA_node = NewNode();
-        nand->inputB_node = NewNode();
-        nand->output_node = NewNode();
+        nand->inputA_node = NewNode(x, y + (64 * 0.3f));
+        nand->inputB_node = NewNode(x, y + (64 * 0.7f));
+        nand->output_node = NewNode(x + 64, y + 32);
 
         nand->inputA_node->connected_nand = nand;
         nand->inputB_node->connected_nand = nand;
@@ -126,6 +124,9 @@ public:
             nand->name = name;
             nand_lookup[name] = nand;
         }
+
+        nand->x = x;
+        nand->y = y;
 
         return nand;
     }
@@ -142,10 +143,9 @@ public:
 
     void ConnectNodes(std::shared_ptr<node_t> n0, std::shared_ptr<node_t> n1)
     {
-        n0->connected_nodes.emplace_back(n1);
+        n0->driving.emplace_back(n1);
     };
 
-    
     void SetActive(std::shared_ptr<node_t> n, bool new_active)
     {
         n->active = new_active;
@@ -153,18 +153,43 @@ public:
         q.push(n);
     }
 
-    void AddConstant(std::shared_ptr<component_t> component, bool locked, bool active)
+    std::shared_ptr<node_t> NewConstant(int x, int y, bool active)
     {
-        component->locked = locked;
-        component->active = active;
-        constants.emplace_back(component);
+        auto constant = std::make_shared<node_t>();
+        nodes.emplace_back(constant);
+        constant->id = nodes.size() - 1;
+        constant->self = constant;
+
+        constant->locked = true;
+        constant->active = active;
+        constant->drawable = true;
+        nodes.emplace_back(constant);
+
+        constant->x = x;
+        constant->y = y;
+
+        return constant;
+    }
+
+    std::shared_ptr<node_t> NewProbe(int x, int y)
+    {
+        auto probe = std::make_shared<node_t>();
+        nodes.emplace_back(probe);
+        probe->id = nodes.size() - 1;
+        probe->self = probe;
+
+        nodes.emplace_back(probe);
+
+        probe->x = x;
+        probe->y = y;
+
+        return probe;
     }
 
     // Step Information
     long step_count = 0;
     long long step_time = 0;
 
-private:
     // Components
     std::vector<std::shared_ptr<nand_t>> nands;
     std::vector<std::shared_ptr<node_t>> nodes;
@@ -173,5 +198,4 @@ private:
 
     // Simulation
     std::queue<std::shared_ptr<component_t>> q;
-    std::vector<std::shared_ptr<component_t>> constants;
 };

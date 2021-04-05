@@ -1,6 +1,14 @@
 #include "window.h"
 #include "simulation.h"
 
+enum GUI_ITEM_TYPE
+{
+    GUI_CONSTANT_ZERO,
+    GUI_CONSTANT_ONE,
+    GUI_PROBE,
+    GUI_NAND,
+};
+
 Window::Window()
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
@@ -83,12 +91,37 @@ void Window::Draw(Simulation& sim)
     {
         Frame_Toolbar(sim);
 
+        ImGui::Text("Step Count: %d", sim.step_count);
+
+        ImGui::SameLine();
+        ImGui::Text("| Step Time: %dus", sim.step_time);
+
+        ImGui::SameLine();
+        ImGui::Text("| Nodes: %d", sim.nodes.size());
+
+        ImGui::SameLine();
+        ImGui::Text("| NANDs: %d", sim.nands.size());
+
         if (ImGui::Button("Step"))
         {
             sim.Step();
         }
+
         ImGui::SameLine();
-        ImGui::Text("Step Count: %d", sim.step_count);
+        if (ImGui::Button("c0"))
+        {
+            auto c = sim.GetNode("c0");
+            c->active = !c->active;
+            sim.Step();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("c1"))
+        {
+            auto c = sim.GetNode("c1");
+            c->active = !c->active;
+            sim.Step();
+        }
 
         // TODO: Extract this stuff somewhere else
         static float sz = 64.0f;
@@ -106,35 +139,85 @@ void Window::Draw(Simulation& sim)
 
         // TODO: Define "draw primitives" somewhere else
         ImDrawList* draw_list = ImGui::GetWindowDrawList();
-        auto draw_nand = [&](float x, float y) {
+        auto draw_nand = [&](float x, float y, bool a = false, bool b = false, bool o = false) {
             // Legs
-            draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.3f), ImVec2(x + sz * 0.2f, y + sz * 0.3f), grey, thickness);
-            draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.7f), ImVec2(x + sz * 0.2f, y + sz * 0.7f), grey, thickness);
-            draw_list->AddLine(ImVec2(x + sz * 0.8f, y + sz * 0.5f), ImVec2(x + sz * 1.0f, y + sz * 0.5f), grey, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.3f), ImVec2(x + sz * 0.2f, y + sz * 0.3f), a ? yellow : grey, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.7f), ImVec2(x + sz * 0.2f, y + sz * 0.7f), b ? yellow : grey, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.8f, y + sz * 0.5f), ImVec2(x + sz * 1.0f, y + sz * 0.5f), o ? yellow : grey, thickness);
 
             // Body
-            draw_list->AddTriangle(ImVec2(x + sz * 0.2f, y + sz * 0.2f), ImVec2(x + sz * 0.2f, y + sz * 0.8f), ImVec2(x + sz * 0.8f, y + sz * 0.5f), yellow, thickness);
-            draw_list->AddCircle(ImVec2(x + sz * 0.8f, y + sz * 0.5f), sz * 0.05f, yellow, 8, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.2f), ImVec2(x + sz * 0.2f, y + sz * 0.8f), yellow, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.2f), ImVec2(x + sz * 0.5f, y + sz * 0.2f), yellow, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.5f, y + sz * 0.2f), ImVec2(x + sz * 0.7f, y + sz * 0.3f), yellow, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.7f, y + sz * 0.3f), ImVec2(x + sz * 0.8f, y + sz * 0.5f), yellow, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.7f, y + sz * 0.7f), ImVec2(x + sz * 0.8f, y + sz * 0.5f), yellow, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.5f, y + sz * 0.8f), ImVec2(x + sz * 0.7f, y + sz * 0.7f), yellow, thickness);     
+            draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.8f), ImVec2(x + sz * 0.5f, y + sz * 0.8f), yellow, thickness);
+            draw_list->AddCircle(ImVec2(x + sz * 0.8f, y + sz * 0.5f), sz * 0.05f, yellow, 8, thickness * 2);
+        };
+
+        auto draw_rect = [&](float x, float y) {
+            draw_list->AddRect(ImVec2(x + sz * 0.1f, y + sz * 0.1f), ImVec2(x + sz * 0.9f, y + sz * 0.9f), grey, 10.0f, ImDrawCornerFlags_All, thickness);
+        };
+
+        auto draw_constant_zero = [&](float x, float y) { 
+            draw_rect(x, y);
+            draw_list->AddCircle(ImVec2(x + sz * 0.9f, y + sz * 0.5f), sz * 0.05f, grey, 8, thickness);
+            draw_list->AddText(NULL, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), grey, "0");
+        };
+
+        auto draw_constant_one = [&](float x, float y) {
+            draw_rect(x, y);
+            draw_list->AddCircle(ImVec2(x + sz * 0.9f, y + sz * 0.5f), sz * 0.05f, grey, 8, thickness);
+            draw_list->AddText(NULL, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), yellow, "1");
+        };
+
+        auto draw_probe = [&](float x, float y, bool active) {
+            draw_list->AddCircle(ImVec2(x + sz * 0.5f, y + sz * 0.5f), sz * 0.5f, grey, 16, thickness);
+            draw_list->AddCircle(ImVec2(x + sz * 0.0f, y + sz * 0.5f), sz * 0.05f, grey, 8, thickness);
+            draw_list->AddText(NULL, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), active ? yellow : grey, active ? "1" : "0");
         };
 
         // TODO: Split out "Drag 'n Drop Toolbar" into own method
-        ImGui::Button("##", ImVec2(84, 64));
+        // Constant 0
+        draw_constant_zero(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y);
+        ImGui::Button("##DND_CONSTANT_0", ImVec2(sz, sz));
         if (ImGui::BeginDragDropSource())
         {
-            auto pos = ImGui::GetMousePos();
-            draw_nand(pos.x, pos.y);
-
-            int gate_type = 0; // TODO: Enum
+            auto pos = ImGui::GetCursorScreenPos();
+            draw_constant_zero(pos.x, pos.y);
+            int gate_type = GUI_CONSTANT_ZERO;
             ImGui::SetDragDropPayload("DND_PAYLOAD", &gate_type, sizeof(gate_type));
-
             ImGui::EndDragDropSource();
         }
-        draw_nand(root_x, root_y);
 
-        // Drawing/Canvas area
-        // Data
-        static std::vector<ImVec2> vec;
-        
+        // Constant 1
+        ImGui::SameLine();        
+        draw_constant_one(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y);
+        ImGui::Button("##DND_CONSTANT_1", ImVec2(sz, sz));
+        if (ImGui::BeginDragDropSource())
+        {
+            auto pos = ImGui::GetCursorScreenPos();
+            draw_constant_one(pos.x, pos.y);
+            int gate_type = GUI_CONSTANT_ONE;
+            ImGui::SetDragDropPayload("DND_PAYLOAD", &gate_type, sizeof(gate_type));
+            ImGui::EndDragDropSource();
+        }
+
+        // NAND
+        ImGui::SameLine();
+        draw_nand(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y);
+        ImGui::Button("##DND_NAND", ImVec2(sz, sz));
+        if (ImGui::BeginDragDropSource())
+        {
+            auto pos = ImGui::GetCursorScreenPos();
+            draw_nand(pos.x, pos.y);
+            int gate_type = GUI_NAND;
+            ImGui::SetDragDropPayload("DND_PAYLOAD", &gate_type, sizeof(gate_type));
+            ImGui::EndDragDropSource();
+        }
+
+        // Drawing/Canvas area       
         // Receive DND
         ImVec2 canvas_pos = ImGui::GetCursorScreenPos();     // ImDrawList API uses screen coordinates!
         ImVec2 canvas_size = ImGui::GetContentRegionAvail(); // Resize canvas to what's available
@@ -148,15 +231,48 @@ void Window::Draw(Simulation& sim)
             {
                 auto pos = ImGui::GetMousePos();
                 int gate_type = *reinterpret_cast<int*>(payload->Data);
-                vec.emplace_back(pos);
+                switch (gate_type)
+                {
+                    case GUI_CONSTANT_ZERO:
+                    {
+                        auto constant = sim.NewConstant(pos.x, pos.y, false);
+                        break;
+                    }
+                    case GUI_CONSTANT_ONE:
+                    {
+                        auto constant = sim.NewConstant(pos.x, pos.y, true);
+                        break;
+                    }
+                    case GUI_PROBE:
+                    {
+                        auto probe = sim.NewProbe(pos.x, pos.y);
+                        break;
+                    }
+                    case GUI_NAND:
+                    {
+                        auto nand = sim.NewNAND(pos.x, pos.y);
+                        break;
+                    }
+                    default:
+                        break;
+                }
             }
             ImGui::EndDragDropTarget();
         }
 
-        // Draw data
-        for (auto& item : vec)
+        // Draw Canvas
+        for (auto& nand : sim.nands)
         {
-            draw_nand(item.x, item.y);
+            draw_nand(nand->x, nand->y, nand->inputA_node->active, nand->inputB_node->active, nand->output_node->active);
+        }
+
+        for (auto& node : sim.nodes)
+        {
+            draw_list->AddText(NULL, 0.0f, ImVec2(node->x, node->y), node->active ? yellow : grey, node->active ? "1" : "0");
+            for (auto& driven : node->driving)
+            {
+                draw_list->AddLine(ImVec2(node->x, node->y), ImVec2(driven->x, driven->y), node->active ? yellow : grey, thickness);
+            }
         }
     }
     ImGui::End();

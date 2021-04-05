@@ -12,6 +12,3 @@ add_library(imgui
 
 target_include_directories(imgui PUBLIC imgui imgui/backends)
 target_link_libraries(imgui PUBLIC glad SDL2-static)
-
-set(gtest_force_shared_crt ON)
-add_subdirectory(googletest)
