@@ -74,11 +74,106 @@ void Window::HandleEvents()
 
 void Window::Draw(Simulation& sim)
 {
+    Frame_Prepare();
+
+    // TODO: Don't hardcode sizes
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(1280, 720));
+    ImGui::Begin("MAIN_WINDOW", 0, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_MenuBar);
+    {
+        Frame_Toolbar(sim);
+
+        if (ImGui::Button("Step"))
+        {
+            sim.Step();
+        }
+        ImGui::SameLine();
+        ImGui::Text("Step Count: %d", sim.step_count);
+
+        // TODO: Extract this stuff somewhere else
+        static float sz = 64.0f;
+        static float thickness = 2.0f;
+        const auto p = ImGui::GetCursorPos();
+        float root_x = p.x + 10.0f;
+        float root_y = p.y;
+        float spacing = 8.0f;
+
+        // TODO: Globalize this
+        const ImU32 red = ImColor(ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+        const ImU32 yellow = ImColor(ImVec4(1.0f, 1.0f, 0.4f, 1.0f));
+        const ImU32 grey = ImColor(ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+        const ImU32 green = ImColor(ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+
+        // TODO: Define "draw primitives" somewhere else
+        ImDrawList* draw_list = ImGui::GetWindowDrawList();
+        auto draw_nand = [&](float x, float y) {
+            // Legs
+            draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.3f), ImVec2(x + sz * 0.2f, y + sz * 0.3f), grey, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.7f), ImVec2(x + sz * 0.2f, y + sz * 0.7f), grey, thickness);
+            draw_list->AddLine(ImVec2(x + sz * 0.8f, y + sz * 0.5f), ImVec2(x + sz * 1.0f, y + sz * 0.5f), grey, thickness);
+
+            // Body
+            draw_list->AddTriangle(ImVec2(x + sz * 0.2f, y + sz * 0.2f), ImVec2(x + sz * 0.2f, y + sz * 0.8f), ImVec2(x + sz * 0.8f, y + sz * 0.5f), yellow, thickness);
+            draw_list->AddCircle(ImVec2(x + sz * 0.8f, y + sz * 0.5f), sz * 0.05f, yellow, 8, thickness);
+        };
+
+        // TODO: Split out "Drag 'n Drop Toolbar" into own method
+        ImGui::Button("##", ImVec2(84, 64));
+        if (ImGui::BeginDragDropSource())
+        {
+            auto pos = ImGui::GetMousePos();
+            draw_nand(pos.x, pos.y);
+
+            int gate_type = 0; // TODO: Enum
+            ImGui::SetDragDropPayload("DND_PAYLOAD", &gate_type, sizeof(gate_type));
+
+            ImGui::EndDragDropSource();
+        }
+        draw_nand(root_x, root_y);
+
+        // Drawing/Canvas area
+        // Data
+        static std::vector<ImVec2> vec;
+        
+        // Receive DND
+        ImVec2 canvas_pos = ImGui::GetCursorScreenPos();     // ImDrawList API uses screen coordinates!
+        ImVec2 canvas_size = ImGui::GetContentRegionAvail(); // Resize canvas to what's available
+        draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(255, 255, 255, 255)); 
+        ImGui::InvisibleButton("CANVAS", canvas_size);
+        if (ImGui::BeginDragDropTarget())
+        {
+            ImGuiDragDropFlags target_flags = 0;
+            target_flags |= ImGuiDragDropFlags_AcceptNoDrawDefaultRect; // Don't display the yellow rectangle
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD", target_flags))
+            {
+                auto pos = ImGui::GetMousePos();
+                int gate_type = *reinterpret_cast<int*>(payload->Data);
+                vec.emplace_back(pos);
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        // Draw data
+        for (auto& item : vec)
+        {
+            draw_nand(item.x, item.y);
+        }
+    }
+    ImGui::End();
+
+    Frame_Submit();
+}
+
+void Window::Frame_Prepare()
+{
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(window);
     ImGui::NewFrame();
+}
 
-    if (ImGui::BeginMainMenuBar())
+void Window::Frame_Toolbar(Simulation& sim)
+{
+    if (ImGui::BeginMenuBar())
     {
         if (ImGui::BeginMenu("File"))
         {
@@ -89,34 +184,22 @@ void Window::Draw(Simulation& sim)
             }
             ImGui::EndMenu();
         }
-        ImGui::EndMainMenuBar();
-    }
 
-    ImGui::Begin("MainWindow");
-    {
-        ImGui::Text("clk state: %i", sim.GetNode("clk")->active);
-        ImGui::Text("input0 state: %i", sim.GetNode("input0")->active);
-        ImGui::Text("input1 state: %i", sim.GetNode("input1")->active);
-        ImGui::Text("output state: %i", sim.GetNode("output")->active);
-        ImGui::Text("steps: %i", sim.step_count);
-
-        if (ImGui::Button("Toggle input0"))
+        if (ImGui::BeginMenu("Simulation"))
         {
-            auto input = sim.GetNode("input0");
-            input->active = !input->active;
-            sim.Step();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Step"))
+            {
+                sim.Step();
+            }
+            ImGui::EndMenu();
         }
-
-        if (ImGui::Button("Toggle input1"))
-        {
-            auto input = sim.GetNode("input1");
-            input->active = !input->active;
-            sim.Step();
-        }
-
-        ImGui::End();
+        ImGui::EndMenuBar();
     }
+}
 
+void Window::Frame_Submit()
+{
     ImGui::Render();
     ImGuiIO& io = ImGui::GetIO();
     glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);

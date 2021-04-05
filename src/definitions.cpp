@@ -4,18 +4,15 @@ void node_t::Simulate(std::queue<std::shared_ptr<component_t>>* q)
 {
     for (auto& connected_node : connected_nodes)
     {
-        if (!connected_node->locked)
-        {
-            connected_node->active = this->active;
-            connected_node->dirty = true;
+        connected_node->active = this->active;
+        connected_node->dirty = true;
 
-            q->push(connected_node);
-        }
+        q->push(connected_node);
     }
 
     if (connected_nand != nullptr)
     {
-        q->push(std::static_pointer_cast<component_t>(connected_nand));
+        connected_nand->Simulate(q);
     }
 }
 
@@ -27,5 +24,8 @@ void nand_t::Simulate(std::queue<std::shared_ptr<component_t>>* q)
     this->output_node->active = next_output_state;
     this->output_node->dirty = true;
 
-    q->push(this->output_node);
+    if (starting_output_state != next_output_state)
+    {
+        q->push(this->output_node);
+    }
 }

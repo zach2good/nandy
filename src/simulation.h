@@ -57,16 +57,6 @@ public:
         auto start_time = std::chrono::high_resolution_clock::now();
         for (size_t i = 0; i < 4; i++) // TODO: Reduce this to as small as possible
         {
-            for (auto& node : nodes)
-            {
-                node->dirty = true;
-            }
-            
-            for (auto& nand : nands)
-            {
-                nand->dirty = true;
-            }
-
             for (auto& constant : constants)
             {
                 q.push(constant);
@@ -77,11 +67,7 @@ public:
                 auto& component = q.front();
                 q.pop();
                 
-                if (component->dirty)
-                {
-                    component->Simulate(&q);
-                    component->dirty = false;
-                }
+                component->Simulate(&q);
             }
         }
         auto end_time = std::chrono::high_resolution_clock::now();

@@ -1,9 +1,6 @@
 #include "simulation.h"
 #include "window.h"
 
-
-#include <vector>
-
 int main(int argc, char* argv[])
 {
     Window window;
