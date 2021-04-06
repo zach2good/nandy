@@ -2,19 +2,20 @@
 
 Simulation::Simulation()
 {
+    LoadFromJSONFile("dump.json");
     Step();
 }
 
 void Simulation::Step()
 {
     // TODO: This is accurate, but inefficient
-    for (auto& node : nodes)
+    for (auto& entry : node_lookup)
     {
-        q.push(node);
+        q.push(entry.second);
     }
 
     auto start_time = std::chrono::high_resolution_clock::now();
-    for (size_t i = 0; i < 4; i++) // TODO: Reduce this to as small as possible
+    for (size_t i = 0; i < 1; i++) // TODO: Reduce this to as small as possible
     {
         while (!q.empty())
         {
@@ -23,7 +24,7 @@ void Simulation::Step()
 
             if (component->is_nand)
             {
-                auto nand = std::static_pointer_cast<nand_t>(component);
+                auto nand = GetNAND(component->id);
 
                 auto inputa = nodes[nand->inputa_id];
                 auto inputb = nodes[nand->inputb_id];
@@ -39,15 +40,18 @@ void Simulation::Step()
             }
             else // is_node
             {
-                auto node = std::static_pointer_cast<node_t>(component);
+                auto node = GetNode(component->id);
                 for (auto& connected_node_id : node->driving_ids)
                 {
                     auto connected_node = nodes[connected_node_id];
-                    connected_node->active = node->active;
-                    q.push(connected_node);
+                    if (node->active != connected_node->active)
+                    {
+                        connected_node->active = node->active;
+                        q.push(connected_node);
+                    }
                 }
 
-                if (node->attached_nand)
+                if (node->attached_nand && node->id != nands[node->nand_id]->output_id)
                 {
                     auto connected_nand = nands[node->nand_id];
                     q.push(connected_nand);

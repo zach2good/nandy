@@ -25,7 +25,7 @@ struct nand_t : public component_t
 struct node_t : public component_t
 {
     bool active = false;
+    std::vector<uint32_t> driving_ids;
     bool attached_nand = false;
     uint32_t nand_id;
-    std::vector<uint32_t> driving_ids;
 };

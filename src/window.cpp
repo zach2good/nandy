@@ -129,6 +129,8 @@ void Window::Frame_Draw(Simulation& sim)
         define_c_button("c0");
         define_c_button("c1");
         define_c_button("c2");
+        define_c_button("c3");
+        define_c_button("c4");
 
         // TODO: Extract this stuff somewhere else
         static float sz = 64.0f;
@@ -212,6 +214,10 @@ void Window::Frame_Draw(Simulation& sim)
             {
                 draw_list->AddRect(ImVec2(nand->x, nand->y), ImVec2(nand->x + 64.0f, nand->y + 64.0f), yellow);
                 draw_list->AddText(nullptr, 0.0f, ImVec2(nand->x + 64.0f, nand->y + 64.0f), yellow, std::to_string(nand->id).c_str());
+
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                {
+                }
             }
 
             if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
@@ -255,6 +261,11 @@ void Window::Frame_Draw(Simulation& sim)
             {
                 draw_list->AddRect(ImVec2(node->x - 16.0f, node->y - 16.0f), ImVec2(node->x + 16.0f, node->y + 16.0f), yellow);
                 draw_list->AddText(nullptr, 0.0f, ImVec2(node->x + 16.0f, node->y + 16.0f), yellow, std::to_string(node->id).c_str());
+
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                {
+                    node->driving_ids.clear();
+                }
             }
 
             if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr) && ImGui::IsMouseDragging(ImGuiMouseButton_Right) && !node->attached_nand)
@@ -312,7 +323,6 @@ void Window::Frame_Toolbar(Simulation& sim)
     {
         if (ImGui::BeginMenu("File"))
         {
-            ImGui::Separator();
             if (ImGui::MenuItem("Exit"))
             {
                 done = true;
@@ -322,10 +332,18 @@ void Window::Frame_Toolbar(Simulation& sim)
 
         if (ImGui::BeginMenu("Simulation"))
         {
-            ImGui::Separator();
             if (ImGui::MenuItem("Step"))
             {
                 sim.Step();
+            }
+            if (ImGui::MenuItem("Clear"))
+            {
+                sim.step_count = 0;
+                sim.step_time = 0;
+                sim.nands.clear();
+                sim.nodes.clear();
+                sim.nand_lookup.clear();
+                sim.node_lookup.clear();
             }
             ImGui::EndMenu();
         }

@@ -25,7 +25,6 @@ public:
 
     std::shared_ptr<nand_t> GetNAND(uint32_t id)
     {
-        
         return nands[id];
     }
 
@@ -59,6 +58,7 @@ public:
             j["nands"][nand->id]["id"] = nand->id;
             j["nands"][nand->id]["x"] = nand->x;
             j["nands"][nand->id]["y"] = nand->y;
+            j["nands"][nand->id]["is_nand"] = nand->is_nand;
 
             j["nands"][nand->id]["inputa_id"] = nand->inputa_id;
             j["nands"][nand->id]["inputb_id"] = nand->inputb_id;
@@ -70,9 +70,13 @@ public:
             j["nodes"][node->id]["id"] = node->id;
             j["nodes"][node->id]["x"] = node->x;
             j["nodes"][node->id]["y"] = node->y;
+            j["nodes"][node->id]["is_nand"] = node->is_nand;
 
             j["nodes"][node->id]["active"] = node->active;
             j["nodes"][node->id]["driving_ids"] = node->driving_ids;
+
+            j["nodes"][node->id]["attached_nand"] = node->attached_nand;
+            j["nodes"][node->id]["nand_id"] = node->nand_id;
         }
 
         for (auto& entry : nand_lookup)
@@ -107,45 +111,62 @@ public:
         nand_lookup.clear();
         node_lookup.clear();
 
-        for (auto& entry : j["nands"])
+        if (j.find("nands") != j.end())
         {
-            auto nand = std::make_shared<nand_t>();
-            nand->id = entry["id"];
-            nand->x = entry["x"];
-            nand->y = entry["y"];
+            for (auto& entry : j["nands"])
+            {
+                auto nand = std::make_shared<nand_t>();
+                nand->id = entry["id"];
+                nand->x = entry["x"];
+                nand->y = entry["y"];
+                nand->is_nand = entry["is_nand"];
 
-            nand->inputa_id = entry["inputa_id"];
-            nand->inputb_id = entry["inputb_id"];
-            nand->output_id = entry["output_id"];
+                nand->inputa_id = entry["inputa_id"];
+                nand->inputb_id = entry["inputb_id"];
+                nand->output_id = entry["output_id"];
 
-            nands.emplace_back(nand);
+                nands.emplace_back(nand);
+            }
         }
 
-        for (auto& entry : j["nodes"])
+        if (j.find("nodes") != j.end())
         {
-            auto node = std::make_shared<node_t>();
-            node->id = entry["id"];
-            node->x = entry["x"];
-            node->y = entry["y"];
+            for (auto& entry : j["nodes"])
+            {
+                auto node = std::make_shared<node_t>();
+                node->id = entry["id"];
+                node->x = entry["x"];
+                node->y = entry["y"];
+                node->is_nand = entry["is_nand"];
 
-            node->active = entry["active"];
-            node->driving_ids = entry["driving_ids"].get<std::vector<uint32_t>>();
+                node->active = entry["active"];
+                node->driving_ids = entry["driving_ids"].get<std::vector<uint32_t>>();
 
-            nodes.emplace_back(node);
+                node->attached_nand = entry["attached_nand"];
+                node->nand_id = entry["nand_id"];
+
+                nodes.emplace_back(node);
+            }
         }
 
-        for (auto& entry : j["nand_lookup"].items())
+        if (j.find("nand_lookup") != j.end())
         {
-            auto str = entry.key();
-            auto id = entry.value();
-            nand_lookup[str] = GetNAND(id);
+            for (auto& entry : j["nand_lookup"].items())
+            {
+                auto str = entry.key();
+                auto id = entry.value();
+                nand_lookup[str] = GetNAND(id);
+            }
         }
 
-        for (auto& entry : j["node_lookup"].items())
+        if (j.find("node_lookup") != j.end())
         {
-            auto str = entry.key();
-            auto id = entry.value();
-            node_lookup[str] = GetNode(id);
+            for (auto& entry : j["node_lookup"].items())
+            {
+                auto str = entry.key();
+                auto id = entry.value();
+                node_lookup[str] = GetNode(id);
+            }
         }
     }
 
