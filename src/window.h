@@ -1,13 +1,6 @@
 #pragma once
 
-#include <chrono>
-#include <cstdio>
-#include <vector>
-
 #include <SDL.h>
-
-#include <glad/glad.h>
-
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl.h"
@@ -17,20 +10,21 @@ class Simulation;
 class Window
 {
 public:
-    Window();
+    Window(int w, int h);
     ~Window();
 
     void HandleEvents();
-    void Draw(Simulation& sim);
 
+    void Frame_Draw(Simulation& sim);
     void Frame_Prepare();
     void Frame_Toolbar(Simulation& sim);
     void Frame_Submit();
 
-    bool QuitRequested()
+    bool QuitRequested() const
     {
         return done;
     }
+
     SDL_Window* GetSDLWindow()
     {
         return window;
@@ -39,8 +33,10 @@ public:
 private:
     static void CherryTheme();
 
+    int m_width;
+    int m_height;
+
     bool done = false;
     SDL_Window* window;
     SDL_GLContext gl_context;
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 };

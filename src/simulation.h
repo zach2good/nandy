@@ -1,189 +1,167 @@
 #pragma once
 
 #include <chrono>
+#include <fstream>
 #include <memory>
 #include <queue>
 #include <unordered_map>
 #include <vector>
+
+// TODO: Fix includes
+#include "../ext/json/nlohmann/json.hpp"
 
 #include "definitions.h"
 
 class Simulation
 {
 public:
-    Simulation()
-    {
-        // Hard-coded sim for testing
-        // NAND
-        auto nand = NewNAND(300, 300, "nand");
-
-        auto c0 = NewNode(200, 250, "c0");
-        c0->active = true;
-        c0->locked = true;
-
-        auto c1 = NewNode(200, 400, "c1");
-        c1->active = false;
-        c1->locked = true;
-
-        auto p0 = NewNode(400, 332, "p0");
-
-        ConnectNodes(c0, nand->inputA_node);
-        ConnectNodes(c1, nand->inputB_node);
-        ConnectNodes(nand->output_node, p0);
-
-        // NOT
-        auto n0 = NewNode(500, 250, "n0");
-        auto n1 = NewNAND(600, 300, "not");
-        auto p1 = NewNode(700, 332, "p1");
-
-        ConnectNodes(c0, n0);
-        ConnectNodes(n0, n1->inputA_node);
-        ConnectNodes(n0, n1->inputB_node);
-        ConnectNodes(n1->output_node, p1);
-
-        Step();
-    }
-
+    Simulation();
     ~Simulation() = default;
 
-    void Step()
-    {
-        // TODO: This is accurate, but inefficient
-        for (auto& node : nodes)
-        {
-            q.push(node);
-        }
+    void Step();
 
-        auto start_time = std::chrono::high_resolution_clock::now();
-        for (size_t i = 0; i < 4; i++) // TODO: Reduce this to as small as possible
-        {
-            while (!q.empty())
-            {
-                auto& component = q.front();
-                q.pop();
-                
-                component->Simulate(&q);
-            }
-        }
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto time_taken = end_time - start_time;
-        auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(time_taken);
-        step_time = microseconds.count();
-        ++step_count;
+    std::shared_ptr<nand_t> NewNAND(int x = 0, int y = 0, const std::string& name = "");
+    std::shared_ptr<node_t> NewNode(int x = 0, int y = 0, const std::string& name = "");
+
+    std::shared_ptr<nand_t> GetNAND(uint32_t id)
+    {
+        
+        return nands[id];
     }
 
-    std::shared_ptr<node_t> NewNode(int x, int y, std::string name = "")
-    {
-        auto node = std::make_shared<node_t>();
-        nodes.emplace_back(node);
-        node->id = nodes.size() - 1;
-        node->self = node;
-
-        if (!name.empty())
-        {
-            node->name = name;
-            node_lookup[name] = node;
-        }
-
-        node->x = x;
-        node->y = y;
-
-        return node;
-    }
-
-    std::shared_ptr<node_t> GetNode(uint16_t id)
+    std::shared_ptr<node_t> GetNode(uint32_t id)
     {
         return nodes[id];
     }
 
-    std::shared_ptr<node_t> GetNode(std::string name)
+    std::shared_ptr<nand_t> LookupNAND(const std::string& name)
     {
-        return node_lookup[name];
+        return nand_lookup.find(name) != nand_lookup.end() ? nand_lookup[name] : nullptr;
     }
 
-    std::shared_ptr<nand_t> NewNAND(int x, int y, std::string name = "")
+    std::shared_ptr<node_t> LookupNode(const std::string& name)
     {
-        auto nand = std::make_shared<nand_t>();
-        nands.emplace_back(nand);
-        nand->id = nands.size() - 1;
-        nand->self = nand;
-
-        // Attach Nodes
-        nand->inputA_node = NewNode(x, y + (64 * 0.3f));
-        nand->inputB_node = NewNode(x, y + (64 * 0.7f));
-        nand->output_node = NewNode(x + 64, y + 32);
-
-        nand->inputA_node->connected_nand = nand;
-        nand->inputB_node->connected_nand = nand;
-        nand->output_node->connected_nand = nand;
-
-        nand->output_node->active = true;
-
-        if (!name.empty())
-        {
-            nand->name = name;
-            nand_lookup[name] = nand;
-        }
-
-        nand->x = x;
-        nand->y = y;
-
-        return nand;
+        return node_lookup.find(name) != node_lookup.end() ? node_lookup[name] : nullptr;
     }
 
-    std::shared_ptr<nand_t> GetTransistor(uint16_t id)
+    void ConnectNodes(const uint32_t id0, const uint32_t id1)
     {
-        return nands[id];
-    }
-
-    std::shared_ptr<nand_t> GetTransistor(std::string name)
-    {
-        return nand_lookup[name];
-    }
-
-    void ConnectNodes(std::shared_ptr<node_t> n0, std::shared_ptr<node_t> n1)
-    {
-        n0->driving.emplace_back(n1);
+        printf("Connecting: %d -> %d\n", id0, id1);
+        auto& n0 = nodes[id0];
+        n0->driving_ids.emplace_back(id1);
     };
 
-    void SetActive(std::shared_ptr<node_t> n, bool new_active)
+    nlohmann::json DumpToJSONObject()
     {
-        n->active = new_active;
-        n->dirty = true;
-        q.push(n);
+        nlohmann::json j;
+        for (auto& nand : nands)
+        {
+            j["nands"][nand->id]["id"] = nand->id;
+            j["nands"][nand->id]["x"] = nand->x;
+            j["nands"][nand->id]["y"] = nand->y;
+
+            j["nands"][nand->id]["inputa_id"] = nand->inputa_id;
+            j["nands"][nand->id]["inputb_id"] = nand->inputb_id;
+            j["nands"][nand->id]["output_id"] = nand->output_id;
+        }
+
+        for (auto& node : nodes)
+        {
+            j["nodes"][node->id]["id"] = node->id;
+            j["nodes"][node->id]["x"] = node->x;
+            j["nodes"][node->id]["y"] = node->y;
+
+            j["nodes"][node->id]["active"] = node->active;
+            j["nodes"][node->id]["driving_ids"] = node->driving_ids;
+        }
+
+        for (auto& entry : nand_lookup)
+        {
+            auto str = entry.first;
+            auto ptr = entry.second;
+            j["nand_lookup"][str] = ptr->id;
+        }
+
+        for (auto& entry : node_lookup)
+        {
+            auto str = entry.first;
+            auto ptr = entry.second;
+            j["node_lookup"][str] = ptr->id;
+        }
+
+        return j;
     }
 
-    std::shared_ptr<node_t> NewConstant(int x, int y, bool active)
+    void DumpJSONObjectToFile(const nlohmann::json& j, const std::string& filename)
     {
-        auto constant = std::make_shared<node_t>();
-        nodes.emplace_back(constant);
-        constant->id = nodes.size() - 1;
-        constant->self = constant;
-
-        constant->locked = true;
-        constant->active = active;
-        constant->drawable = true;
-        nodes.emplace_back(constant);
-
-        constant->x = x;
-        constant->y = y;
-
-        return constant;
+        std::ofstream o(filename);
+        o << j.dump();
     }
 
-    std::shared_ptr<node_t> NewProbe(int x, int y)
+    void LoadFromJSONObject(const nlohmann::json& j)
     {
-        auto probe = std::make_shared<node_t>();
-        nodes.emplace_back(probe);
-        probe->id = nodes.size() - 1;
-        probe->self = probe;
+        using nlohmann::json;
 
-        nodes.emplace_back(probe);
+        nands.clear();
+        nodes.clear();
+        nand_lookup.clear();
+        node_lookup.clear();
 
-        probe->x = x;
-        probe->y = y;
+        for (auto& entry : j["nands"])
+        {
+            auto nand = std::make_shared<nand_t>();
+            nand->id = entry["id"];
+            nand->x = entry["x"];
+            nand->y = entry["y"];
 
-        return probe;
+            nand->inputa_id = entry["inputa_id"];
+            nand->inputb_id = entry["inputb_id"];
+            nand->output_id = entry["output_id"];
+
+            nands.emplace_back(nand);
+        }
+
+        for (auto& entry : j["nodes"])
+        {
+            auto node = std::make_shared<node_t>();
+            node->id = entry["id"];
+            node->x = entry["x"];
+            node->y = entry["y"];
+
+            node->active = entry["active"];
+            node->driving_ids = entry["driving_ids"].get<std::vector<uint32_t>>();
+
+            nodes.emplace_back(node);
+        }
+
+        for (auto& entry : j["nand_lookup"].items())
+        {
+            auto str = entry.key();
+            auto id = entry.value();
+            nand_lookup[str] = GetNAND(id);
+        }
+
+        for (auto& entry : j["node_lookup"].items())
+        {
+            auto str = entry.key();
+            auto id = entry.value();
+            node_lookup[str] = GetNode(id);
+        }
+    }
+
+    void LoadFromJSONFile(const std::string& filename)
+    {
+        std::ifstream i(filename);
+        nlohmann::json j;
+        i >> j;
+        LoadFromJSONObject(j);
+    }
+
+    void LoadFromJSONString(const std::string& str)
+    {
+        nlohmann::json j;
+        j.parse(str);
+        LoadFromJSONObject(j);
     }
 
     // Step Information

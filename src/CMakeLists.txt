@@ -1,4 +1,4 @@
-add_library(simulation STATIC simulation.cpp definitions.cpp)
+add_library(simulation STATIC simulation.cpp)
 target_include_directories(simulation PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_executable(nandy main.cpp window.cpp)

@@ -3,13 +3,13 @@
 
 int main(int argc, char* argv[])
 {
-    Window window;
+    Window window = Window(1280, 720);
     Simulation sim;
 
     while (!window.QuitRequested())
     {
         window.HandleEvents();
-        window.Draw(sim);
+        window.Frame_Draw(sim);
     }
 
     return 0;

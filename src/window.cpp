@@ -1,15 +1,17 @@
 #include "window.h"
 #include "simulation.h"
 
-enum GUI_ITEM_TYPE
-{
-    GUI_CONSTANT_ZERO,
-    GUI_CONSTANT_ONE,
-    GUI_PROBE,
-    GUI_NAND,
-};
+#include <chrono>
+#include <cstdio>
+#include <vector>
 
-Window::Window()
+#include <glad/glad.h>
+
+ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+Window::Window(int w, int h)
+: m_width(w)
+, m_height(h)
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
     {
@@ -26,7 +28,7 @@ Window::Window()
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    window = SDL_CreateWindow("nandy", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+    window = SDL_CreateWindow("nandy", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_width, m_height, window_flags);
     gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
     SDL_GL_SetSwapInterval(1); // Enable vsync
@@ -80,13 +82,14 @@ void Window::HandleEvents()
     }
 }
 
-void Window::Draw(Simulation& sim)
+void Window::Frame_Draw(Simulation& sim)
 {
+    ImGuiIO& io = ImGui::GetIO();
     Frame_Prepare();
 
     // TODO: Don't hardcode sizes
     ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(1280, 720));
+    ImGui::SetNextWindowSize(ImVec2(m_width, m_height));
     ImGui::Begin("MAIN_WINDOW", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_MenuBar);
     {
         Frame_Toolbar(sim);
@@ -107,21 +110,25 @@ void Window::Draw(Simulation& sim)
             sim.Step();
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button("c0"))
-        {
-            auto c = sim.GetNode("c0");
-            c->active = !c->active;
-            sim.Step();
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("c1"))
-        {
-            auto c = sim.GetNode("c1");
-            c->active = !c->active;
-            sim.Step();
-        }
+        auto define_c_button = [&](const char* name) {
+            ImGui::SameLine();
+            if (ImGui::Button(name))
+            {
+                auto c = sim.LookupNode(name);
+                if (c)
+                {
+                    c->active = !c->active;
+                }
+                else
+                {
+                    sim.NewNode(100, 200, name);
+                }
+                sim.Step();
+            }
+        };
+        define_c_button("c0");
+        define_c_button("c1");
+        define_c_button("c2");
 
         // TODO: Extract this stuff somewhere else
         static float sz = 64.0f;
@@ -160,116 +167,131 @@ void Window::Draw(Simulation& sim)
         auto draw_constant_zero = [&](float x, float y) { 
             draw_rect(x, y);
             draw_list->AddCircle(ImVec2(x + sz * 0.9f, y + sz * 0.5f), sz * 0.05f, grey, 8, thickness);
-            draw_list->AddText(NULL, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), grey, "0");
+            draw_list->AddText(nullptr, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), grey, "0");
         };
 
         auto draw_constant_one = [&](float x, float y) {
             draw_rect(x, y);
             draw_list->AddCircle(ImVec2(x + sz * 0.9f, y + sz * 0.5f), sz * 0.05f, grey, 8, thickness);
-            draw_list->AddText(NULL, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), yellow, "1");
+            draw_list->AddText(nullptr, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), yellow, "1");
         };
 
         auto draw_probe = [&](float x, float y, bool active) {
             draw_list->AddCircle(ImVec2(x + sz * 0.5f, y + sz * 0.5f), sz * 0.5f, grey, 16, thickness);
             draw_list->AddCircle(ImVec2(x + sz * 0.0f, y + sz * 0.5f), sz * 0.05f, grey, 8, thickness);
-            draw_list->AddText(NULL, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), active ? yellow : grey, active ? "1" : "0");
+            draw_list->AddText(nullptr, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), active ? yellow : grey, active ? "1" : "0");
         };
 
-        // TODO: Split out "Drag 'n Drop Toolbar" into own method
-        // Constant 0
-        draw_constant_zero(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y);
-        ImGui::Button("##DND_CONSTANT_0", ImVec2(sz, sz));
-        if (ImGui::BeginDragDropSource())
-        {
-            auto pos = ImGui::GetCursorScreenPos();
-            draw_constant_zero(pos.x, pos.y);
-            int gate_type = GUI_CONSTANT_ZERO;
-            ImGui::SetDragDropPayload("DND_PAYLOAD", &gate_type, sizeof(gate_type));
-            ImGui::EndDragDropSource();
-        }
-
-        // Constant 1
-        ImGui::SameLine();        
-        draw_constant_one(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y);
-        ImGui::Button("##DND_CONSTANT_1", ImVec2(sz, sz));
-        if (ImGui::BeginDragDropSource())
-        {
-            auto pos = ImGui::GetCursorScreenPos();
-            draw_constant_one(pos.x, pos.y);
-            int gate_type = GUI_CONSTANT_ONE;
-            ImGui::SetDragDropPayload("DND_PAYLOAD", &gate_type, sizeof(gate_type));
-            ImGui::EndDragDropSource();
-        }
-
-        // NAND
-        ImGui::SameLine();
+        // TODO: Make this DND!
+        // NAND Button
         draw_nand(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y);
-        ImGui::Button("##DND_NAND", ImVec2(sz, sz));
-        if (ImGui::BeginDragDropSource())
+        if (ImGui::Button("##DND_NAND", ImVec2(sz, sz)))
         {
-            auto pos = ImGui::GetCursorScreenPos();
-            draw_nand(pos.x, pos.y);
-            int gate_type = GUI_NAND;
-            ImGui::SetDragDropPayload("DND_PAYLOAD", &gate_type, sizeof(gate_type));
-            ImGui::EndDragDropSource();
+            sim.NewNAND(200, 200);
         }
 
         // Drawing/Canvas area       
-        // Receive DND
         ImVec2 canvas_pos = ImGui::GetCursorScreenPos();     // ImDrawList API uses screen coordinates!
         ImVec2 canvas_size = ImGui::GetContentRegionAvail(); // Resize canvas to what's available
-        draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(255, 255, 255, 255)); 
-        ImGui::InvisibleButton("CANVAS", canvas_size);
-        if (ImGui::BeginDragDropTarget())
-        {
-            ImGuiDragDropFlags target_flags = 0;
-            target_flags |= ImGuiDragDropFlags_AcceptNoDrawDefaultRect; // Don't display the yellow rectangle
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PAYLOAD", target_flags))
-            {
-                auto pos = ImGui::GetMousePos();
-                int gate_type = *reinterpret_cast<int*>(payload->Data);
-                switch (gate_type)
-                {
-                    case GUI_CONSTANT_ZERO:
-                    {
-                        auto constant = sim.NewConstant(pos.x, pos.y, false);
-                        break;
-                    }
-                    case GUI_CONSTANT_ONE:
-                    {
-                        auto constant = sim.NewConstant(pos.x, pos.y, true);
-                        break;
-                    }
-                    case GUI_PROBE:
-                    {
-                        auto probe = sim.NewProbe(pos.x, pos.y);
-                        break;
-                    }
-                    case GUI_NAND:
-                    {
-                        auto nand = sim.NewNAND(pos.x, pos.y);
-                        break;
-                    }
-                    default:
-                        break;
-                }
-            }
-            ImGui::EndDragDropTarget();
-        }
 
-        // Draw Canvas
+        draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(255, 255, 255, 255));
+
+        // Draw Canvas items
         for (auto& nand : sim.nands)
         {
-            draw_nand(nand->x, nand->y, nand->inputA_node->active, nand->inputB_node->active, nand->output_node->active);
+            ImGui::PushID(nand->id);
+
+            auto inputa = sim.GetNode(nand->inputa_id);
+            auto inputb = sim.GetNode(nand->inputb_id);
+            auto output = sim.GetNode(nand->output_id);
+            draw_nand(nand->x, nand->y, inputa->active, inputb->active, output->active);
+
+            ImGui::SetCursorScreenPos(ImVec2(nand->x, nand->y));
+            ImGui::InvisibleButton("nand" + nand->id, ImVec2(64.0f, 64.0f));
+            if (ImGui::IsItemHovered())
+            {
+                draw_list->AddRect(ImVec2(nand->x, nand->y), ImVec2(nand->x + 64.0f, nand->y + 64.0f), yellow);
+                draw_list->AddText(nullptr, 0.0f, ImVec2(nand->x + 64.0f, nand->y + 64.0f), yellow, std::to_string(nand->id).c_str());
+            }
+
+            if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+            {
+                auto delta = io.MouseDelta;
+                nand->x += delta.x;
+                nand->y += delta.y;
+
+                inputa->x = nand->x;
+                inputa->y = nand->y + (64 * 0.3f);
+
+                inputb->x = nand->x;
+                inputb->y = nand->y + (64 * 0.7f);
+
+                output->x = nand->x + 64;
+                output->y = nand->y + 32;
+            }
+            ImGui::PopID();
         }
 
         for (auto& node : sim.nodes)
         {
+            ImGui::PushID(node->id);
+
+            auto bounds_ul = ImVec2(node->x - 16.0f, node->y - 16.0f);
+            auto bounds_lr = ImVec2(node->x + 16.0f, node->y + 16.0f);
+
             draw_list->AddText(nullptr, 0.0f, ImVec2(node->x, node->y), node->active ? yellow : grey, node->active ? "1" : "0");
-            for (auto& driven : node->driving)
+            for (auto& driven_id : node->driving_ids)
             {
+                auto driven = sim.GetNode(driven_id);
                 draw_list->AddLine(ImVec2(node->x, node->y), ImVec2(driven->x, driven->y), node->active ? yellow : grey, thickness);
             }
+
+            ImGui::SetCursorScreenPos(ImVec2(node->x - 16.0f, node->y - 16.0f));
+            ImGui::InvisibleButton("node" + node->id, ImVec2(32.0f, 32.0f));
+            auto delta = io.MouseDelta;
+            auto pos = ImGui::GetMousePos();
+
+            if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr))
+            {
+                draw_list->AddRect(ImVec2(node->x - 16.0f, node->y - 16.0f), ImVec2(node->x + 16.0f, node->y + 16.0f), yellow);
+                draw_list->AddText(nullptr, 0.0f, ImVec2(node->x + 16.0f, node->y + 16.0f), yellow, std::to_string(node->id).c_str());
+            }
+
+            if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr) && ImGui::IsMouseDragging(ImGuiMouseButton_Right) && !node->attached_nand)
+            {
+                node->x += delta.x;
+                node->y += delta.y;
+            }
+                                      
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers | ImGuiDragDropFlags_SourceAutoExpirePayload))
+            {
+                draw_list->AddLine(ImVec2(node->x, node->y), ImVec2(pos.x, pos.y), node->active ? yellow : grey, thickness);
+                ImGui::SetDragDropPayload("DND_NODE_PAYLOAD", &node->id, sizeof(uint32_t));
+                ImGui::EndDragDropSource();
+            }
+
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_NODE_PAYLOAD", ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
+                {
+                    auto from_node_id = *(uint32_t*)payload->Data;
+                    sim.ConnectNodes(from_node_id, node->id);
+                }
+                ImGui::EndDragDropTarget();
+            }
+            ImGui::PopID();
+        }
+
+        for (auto& entry : sim.node_lookup)
+        {
+            auto str = entry.first;
+            auto node = entry.second;
+            draw_list->AddText(nullptr, 0.0f, ImVec2(node->x, node->y - 16.0f), yellow, str.c_str());
+        }
+
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            sim.DumpJSONObjectToFile(sim.DumpToJSONObject(), "dump.json");
         }
     }
     ImGui::End();
