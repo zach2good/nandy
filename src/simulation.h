@@ -181,20 +181,34 @@ public:
     void LoadFromJSONString(const std::string& str)
     {
         nlohmann::json j;
-        j.parse(str);
-        LoadFromJSONObject(j);
+        LoadFromJSONObject(j.parse(str));
+    }
+
+    void AddLabel(int x, int y, const std::string& str)
+    {
+        label_t l;
+        l.x = x;
+        l.y = y;
+        l.text = str;
+        labels.emplace_back(l);
     }
 
     // Step Information
     long step_count = 0;
     long long step_time = 0;
 
-    // Components
+    // Component Containers
     std::vector<std::shared_ptr<nand_t>> nands;
     std::vector<std::shared_ptr<node_t>> nodes;
     std::unordered_map<std::string, std::shared_ptr<nand_t>> nand_lookup;
     std::unordered_map<std::string, std::shared_ptr<node_t>> node_lookup;
 
+    // Components
+    std::shared_ptr<node_t> clk;
+    
     // Simulation
     std::queue<std::shared_ptr<component_t>> q;
+
+    // Decorations
+    std::vector<label_t> labels;
 };

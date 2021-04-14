@@ -2,29 +2,63 @@
 
 Simulation::Simulation()
 {
-    LoadFromJSONFile("dump.json");
-    Step();
+    // Clock
+    clk = NewNode(50, 200, "clk");
+
+    // Large circuit
+    std::shared_ptr<node_t> last_node = clk;
+
+    int size_step = 64;
+
+    for (int i = 0; i < std::pow(2, 16); ++i)
+    {
+        auto nand = NewNAND(100 + (i * size_step), 200);
+
+        ConnectNodes(last_node->id, nand->inputa_id);
+        ConnectNodes(last_node->id, nand->inputb_id);
+
+        last_node = GetNode(nand->output_id);
+    }
+
+    for (auto& node : nodes)
+    {
+        q.push(node);
+    }
 }
 
 void Simulation::Step()
 {
-    // TODO: This is accurate, but inefficient
-    for (auto& entry : node_lookup)
+    clk->active = !clk->active;
+    q.push(clk);
+
+    if (q.empty())
     {
-        q.push(entry.second);
+        for (auto& entry : node_lookup)
+        {
+            q.push(entry.second);
+        }
     }
 
     auto start_time = std::chrono::high_resolution_clock::now();
-    for (size_t i = 0; i < 1; i++) // TODO: Reduce this to as small as possible
+    for (size_t i = 0; i < 2; i++) // TODO: Reduce this to as small as possible
     {
         while (!q.empty())
         {
             auto& component = q.front();
             q.pop();
 
+            if (!component)
+            {
+                continue;
+            }
+
             if (component->is_nand)
             {
                 auto nand = GetNAND(component->id);
+                if (!nand)
+                {
+                    continue;
+                }
 
                 auto inputa = nodes[nand->inputa_id];
                 auto inputb = nodes[nand->inputb_id];
@@ -41,6 +75,11 @@ void Simulation::Step()
             else // is_node
             {
                 auto node = GetNode(component->id);
+                if (!node)
+                {
+                    continue;
+                }
+
                 for (auto& connected_node_id : node->driving_ids)
                 {
                     auto connected_node = nodes[connected_node_id];
@@ -51,7 +90,7 @@ void Simulation::Step()
                     }
                 }
 
-                if (node->attached_nand && node->id != nands[node->nand_id]->output_id)
+                if (node->attached_nand)
                 {
                     auto connected_nand = nands[node->nand_id];
                     q.push(connected_nand);

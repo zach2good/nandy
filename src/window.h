@@ -1,11 +1,12 @@
 #pragma once
 
 #include <SDL.h>
+
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl.h"
 
-class Simulation;
+#include "simulation.h"
 
 class Window
 {
@@ -14,8 +15,9 @@ public:
     ~Window();
 
     void HandleEvents();
+    void Draw();
+    void Sim();
 
-    void Frame_Draw(Simulation& sim);
     void Frame_Prepare();
     void Frame_Toolbar(Simulation& sim);
     void Frame_Submit();
@@ -39,4 +41,6 @@ private:
     bool done = false;
     SDL_Window* window;
     SDL_GLContext gl_context;
+
+    Simulation sim;
 };

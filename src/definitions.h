@@ -29,3 +29,8 @@ struct node_t : public component_t
     bool attached_nand = false;
     uint32_t nand_id;
 };
+
+struct label_t : public component_t
+{
+    std::string text;
+};

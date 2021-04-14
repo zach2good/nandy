@@ -42,6 +42,7 @@ Window::Window(int w, int h)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr; 
     (void)io;
 
     CherryTheme();
@@ -82,7 +83,7 @@ void Window::HandleEvents()
     }
 }
 
-void Window::Frame_Draw(Simulation& sim)
+void Window::Draw()
 {
     ImGuiIO& io = ImGui::GetIO();
     Frame_Prepare();
@@ -131,6 +132,22 @@ void Window::Frame_Draw(Simulation& sim)
         define_c_button("c2");
         define_c_button("c3");
         define_c_button("c4");
+        ImGui::SameLine();
+        if (ImGui::Button("Add node"))
+        {
+            sim.NewNode(100, 200);
+        }
+
+        ImGui::SameLine();
+        ImGui::Text("Add label (enter):");
+        ImGui::SameLine();
+        std::array<char, 20> arr{ { 0 } };
+        ImGui::PushItemWidth(128); 
+        if (ImGui::InputText("##", arr.data(), arr.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+        {
+            std::string str(arr.data(), arr.size());
+            sim.AddLabel(200, 200, str);
+        }
 
         // TODO: Extract this stuff somewhere else
         static float sz = 64.0f;
@@ -198,7 +215,9 @@ void Window::Frame_Draw(Simulation& sim)
 
         draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(255, 255, 255, 255));
 
-        // Draw Canvas items
+        // Draw Simulation items
+        auto delta = io.MouseDelta;
+        auto pos = ImGui::GetMousePos();
         for (auto& nand : sim.nands)
         {
             ImGui::PushID(nand->id);
@@ -254,21 +273,19 @@ void Window::Frame_Draw(Simulation& sim)
 
             ImGui::SetCursorScreenPos(ImVec2(node->x - 16.0f, node->y - 16.0f));
             ImGui::InvisibleButton("node" + node->id, ImVec2(32.0f, 32.0f));
-            auto delta = io.MouseDelta;
-            auto pos = ImGui::GetMousePos();
 
             if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr))
             {
                 draw_list->AddRect(ImVec2(node->x - 16.0f, node->y - 16.0f), ImVec2(node->x + 16.0f, node->y + 16.0f), yellow);
                 draw_list->AddText(nullptr, 0.0f, ImVec2(node->x + 16.0f, node->y + 16.0f), yellow, std::to_string(node->id).c_str());
 
-                if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Middle) || ImGui::IsKeyPressed(ImGuiKey_Backspace))
                 {
                     node->driving_ids.clear();
                 }
             }
 
-            if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr) && ImGui::IsMouseDragging(ImGuiMouseButton_Right) && !node->attached_nand)
+            if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr) && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && !node->attached_nand)
             {
                 node->x += delta.x;
                 node->y += delta.y;
@@ -300,6 +317,22 @@ void Window::Frame_Draw(Simulation& sim)
             draw_list->AddText(nullptr, 0.0f, ImVec2(node->x, node->y - 16.0f), yellow, str.c_str());
         }
 
+        for (auto& label : sim.labels)
+        {
+            ImGui::SetCursorScreenPos(ImVec2(label.x, label.y));
+            ImGui::Text(label.text.c_str());
+            auto rect = ImGui::GetItemRectSize();
+            if (ImGui::IsMouseHoveringRect(ImVec2(label.x, label.y), ImVec2(label.x + rect.x, label.y + rect.y)))
+            {
+                draw_list->AddRect(ImVec2(label.x, label.y), ImVec2(label.x + rect.x, label.y + rect.y), yellow);
+                if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+                {
+                    label.x += delta.x;
+                    label.y += delta.y;
+                }
+            }
+        }
+
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         {
             sim.DumpJSONObjectToFile(sim.DumpToJSONObject(), "dump.json");
@@ -308,6 +341,11 @@ void Window::Frame_Draw(Simulation& sim)
     ImGui::End();
 
     Frame_Submit();
+}
+
+void Window::Sim()
+{
+    sim.Step();
 }
 
 void Window::Frame_Prepare()
@@ -334,7 +372,7 @@ void Window::Frame_Toolbar(Simulation& sim)
         {
             if (ImGui::MenuItem("Step"))
             {
-                sim.Step();
+                //sim.Step();
             }
             if (ImGui::MenuItem("Clear"))
             {
@@ -344,6 +382,7 @@ void Window::Frame_Toolbar(Simulation& sim)
                 sim.nodes.clear();
                 sim.nand_lookup.clear();
                 sim.node_lookup.clear();
+                sim.labels.clear();
             }
             ImGui::EndMenu();
         }
