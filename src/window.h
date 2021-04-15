@@ -2,10 +2,6 @@
 
 #include <SDL.h>
 
-#include "imgui.h"
-#include "imgui_impl_opengl3.h"
-#include "imgui_impl_sdl.h"
-
 #include "simulation.h"
 
 class Window
@@ -33,8 +29,6 @@ public:
     };
 
 private:
-    static void CherryTheme();
-
     int m_width;
     int m_height;
 
@@ -43,4 +37,6 @@ private:
     SDL_GLContext gl_context;
 
     Simulation sim;
+    void DrawNAND(nand_t*& nand);
+    void DrawNode(node_t*& node);
 };

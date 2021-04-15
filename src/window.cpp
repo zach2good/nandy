@@ -1,13 +1,25 @@
 #include "window.h"
 #include "simulation.h"
 
-#include <chrono>
 #include <cstdio>
 #include <vector>
+#include <iostream>
 
 #include <glad/glad.h>
 
-ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+#include "imgui.h"
+#include "imgui_impl_opengl3.h"
+#include "imgui_impl_sdl.h"
+
+const ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+const float sz = 64.0f;
+const float thickness = 2.0f;
+const ImU32 red = ImColor(ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+const ImU32 yellow = ImColor(ImVec4(1.0f, 1.0f, 0.4f, 1.0f));
+const ImU32 grey = ImColor(ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+const ImU32 green = ImColor(ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+
+void CherryTheme();
 
 Window::Window(int w, int h)
 : m_width(w)
@@ -18,17 +30,29 @@ Window::Window(int w, int h)
         printf("Error: %s\n", SDL_GetError());
     }
 
+    // Decide GL+GLSL versions
+#ifdef __APPLE__
+    // GL 3.2 Core + GLSL 150
+    const char* glsl_version = "#version 150";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+#else
+    // GL 3.0 + GLSL 130
     const char* glsl_version = "#version 130";
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
 
+    // Create window with graphics context
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    window = SDL_CreateWindow("nandy", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_width, m_height, window_flags);
+    window = SDL_CreateWindow("nandy", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
     gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
     SDL_GL_SetSwapInterval(1); // Enable vsync
@@ -101,6 +125,9 @@ void Window::Draw()
         ImGui::Text("| Step Time: %lldus", sim.step_time);
 
         ImGui::SameLine();
+        ImGui::Text("| Queue Ops: %ld", sim.queue_ops);
+
+        ImGui::SameLine();
         ImGui::Text("| Nodes: %zu", sim.nodes.size());
 
         ImGui::SameLine();
@@ -122,7 +149,7 @@ void Window::Draw()
                 }
                 else
                 {
-                    sim.NewNode(100, 200, name);
+                    sim.NewNode(300, 300, name);
                 }
                 sim.Step();
             }
@@ -149,16 +176,7 @@ void Window::Draw()
             sim.AddLabel(200, 200, str);
         }
 
-        // TODO: Extract this stuff somewhere else
-        static float sz = 64.0f;
-        static float thickness = 2.0f;
         const auto p = ImGui::GetCursorPos();
-
-        // TODO: Globalize this
-        const ImU32 red = ImColor(ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
-        const ImU32 yellow = ImColor(ImVec4(1.0f, 1.0f, 0.4f, 1.0f));
-        const ImU32 grey = ImColor(ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-        const ImU32 green = ImColor(ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
 
         // TODO: Define "draw primitives" somewhere else
         ImDrawList* draw_list = ImGui::GetWindowDrawList();
@@ -206,7 +224,8 @@ void Window::Draw()
         draw_nand(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y);
         if (ImGui::Button("##DND_NAND", ImVec2(sz, sz)))
         {
-            sim.NewNAND(200, 200);
+            static uint32_t nand_label_id = 0;
+            sim.NewNAND(300, 300, std::to_string(nand_label_id++));
         }
 
         // Drawing/Canvas area       
@@ -218,102 +237,58 @@ void Window::Draw()
         // Draw Simulation items
         auto delta = io.MouseDelta;
         auto pos = ImGui::GetMousePos();
+
+        // Build draw lists
+        std::vector<nand_t*> drawable_nands;
+        std::vector<node_t*> drawable_nodes;
         for (auto& nand : sim.nands)
         {
-            ImGui::PushID(nand->id);
-
-            auto inputa = sim.GetNode(nand->inputa_id);
-            auto inputb = sim.GetNode(nand->inputb_id);
-            auto output = sim.GetNode(nand->output_id);
-            draw_nand(nand->x, nand->y, inputa->active, inputb->active, output->active);
-
-            ImGui::SetCursorScreenPos(ImVec2(nand->x, nand->y));
-            ImGui::InvisibleButton("nand" + nand->id, ImVec2(64.0f, 64.0f));
-            if (ImGui::IsItemHovered())
+            // Don't bother drawing offscreen things!
+            auto bounds_ul = ImVec2(nand->x - 16.0f, nand->y - 16.0f);
+            auto bounds_lr = ImVec2(nand->x + 16.0f, nand->y + 16.0f);
+            if (bounds_ul.x < 0.0f || bounds_ul.x > m_width ||
+                bounds_ul.y < 0.0f || bounds_ul.y > m_height)
             {
-                draw_list->AddRect(ImVec2(nand->x, nand->y), ImVec2(nand->x + 64.0f, nand->y + 64.0f), yellow);
-                draw_list->AddText(nullptr, 0.0f, ImVec2(nand->x + 64.0f, nand->y + 64.0f), yellow, std::to_string(nand->id).c_str());
-
-                if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-                {
-                }
+                continue;
             }
-
-            if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-            {
-                auto delta = io.MouseDelta;
-                nand->x += delta.x;
-                nand->y += delta.y;
-
-                inputa->x = nand->x;
-                inputa->y = nand->y + (64 * 0.3f);
-
-                inputb->x = nand->x;
-                inputb->y = nand->y + (64 * 0.7f);
-
-                output->x = nand->x + 64;
-                output->y = nand->y + 32;
-            }
-            ImGui::PopID();
+            drawable_nands.emplace_back(nand);
         }
 
         for (auto& node : sim.nodes)
         {
-            ImGui::PushID(node->id);
-
+            // Don't bother drawing offscreen things!
             auto bounds_ul = ImVec2(node->x - 16.0f, node->y - 16.0f);
             auto bounds_lr = ImVec2(node->x + 16.0f, node->y + 16.0f);
-
-            draw_list->AddText(nullptr, 0.0f, ImVec2(node->x, node->y), node->active ? yellow : grey, node->active ? "1" : "0");
-            for (auto& driven_id : node->driving_ids)
+            if (bounds_ul.x < 0.0f || bounds_ul.x > m_width ||
+                bounds_ul.y < 0.0f || bounds_ul.y > m_height)
             {
-                auto driven = sim.GetNode(driven_id);
-                draw_list->AddLine(ImVec2(node->x, node->y), ImVec2(driven->x, driven->y), node->active ? yellow : grey, thickness);
+                continue;
             }
+            drawable_nodes.emplace_back(node);
+        }
 
-            ImGui::SetCursorScreenPos(ImVec2(node->x - 16.0f, node->y - 16.0f));
-            ImGui::InvisibleButton("node" + node->id, ImVec2(32.0f, 32.0f));
+        for (auto& nand : drawable_nands)
+        {
+            DrawNAND(nand);
+        }
 
-            if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr))
-            {
-                draw_list->AddRect(ImVec2(node->x - 16.0f, node->y - 16.0f), ImVec2(node->x + 16.0f, node->y + 16.0f), yellow);
-                draw_list->AddText(nullptr, 0.0f, ImVec2(node->x + 16.0f, node->y + 16.0f), yellow, std::to_string(node->id).c_str());
+        for (auto& node : drawable_nodes)
+        {
+            DrawNode(node);
+        }
 
-                if (ImGui::IsMouseClicked(ImGuiMouseButton_Middle) || ImGui::IsKeyPressed(ImGuiKey_Backspace))
-                {
-                    node->driving_ids.clear();
-                }
-            }
-
-            if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr) && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && !node->attached_nand)
-            {
-                node->x += delta.x;
-                node->y += delta.y;
-            }
-                                      
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers | ImGuiDragDropFlags_SourceAutoExpirePayload))
-            {
-                draw_list->AddLine(ImVec2(node->x, node->y), ImVec2(pos.x, pos.y), node->active ? yellow : grey, thickness);
-                ImGui::SetDragDropPayload("DND_NODE_PAYLOAD", &node->id, sizeof(uint32_t));
-                ImGui::EndDragDropSource();
-            }
-
-            if (ImGui::BeginDragDropTarget())
-            {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_NODE_PAYLOAD", ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
-                {
-                    auto from_node_id = *(uint32_t*)payload->Data;
-                    sim.ConnectNodes(from_node_id, node->id);
-                }
-                ImGui::EndDragDropTarget();
-            }
-            ImGui::PopID();
+        for (auto& entry : sim.nand_lookup)
+        {
+            auto str = entry.first;
+            auto nand = entry.second;
+            DrawNAND(nand);
         }
 
         for (auto& entry : sim.node_lookup)
         {
             auto str = entry.first;
             auto node = entry.second;
+            DrawNode(node);
             draw_list->AddText(nullptr, 0.0f, ImVec2(node->x, node->y - 16.0f), yellow, str.c_str());
         }
 
@@ -341,6 +316,125 @@ void Window::Draw()
     ImGui::End();
 
     Frame_Submit();
+}
+void Window::DrawNode(node_t*& node)
+{
+    auto& io = ImGui::GetIO();
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    auto pos = ImGui::GetMousePos();
+    auto delta = io.MouseDelta;
+    auto bounds_ul = ImVec2(node->x - 16.0f, node->y - 16.0f);
+    auto bounds_lr = ImVec2(node->x + 16.0f, node->y + 16.0f);
+
+    ImGui::PushID(node->id);
+
+    draw_list->AddText(nullptr, 0.0f, ImVec2(node->x, node->y), node->active ? yellow : grey, node->active ? "1" : "0");
+    for (auto& driven_id : node->driving_ids)
+    {
+        auto driven = sim.GetNode(driven_id);
+        draw_list->AddLine(ImVec2(node->x, node->y), ImVec2(driven->x, driven->y), node->active ? yellow : grey, thickness);
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(node->x - 16.0f, node->y - 16.0f));
+    ImGui::InvisibleButton("node" + node->id, ImVec2(32.0f, 32.0f));
+
+    if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr))
+    {
+        draw_list->AddRect(ImVec2(node->x - 16.0f, node->y - 16.0f), ImVec2(node->x + 16.0f, node->y + 16.0f), yellow);
+        draw_list->AddText(nullptr, 0.0f, ImVec2(node->x + 16.0f, node->y + 16.0f), yellow, std::to_string(node->id).c_str());
+
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Middle) || ImGui::IsKeyPressed(ImGuiKey_Backspace))
+        {
+            node->driving_ids.clear();
+        }
+    }
+
+    if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr) && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && !node->attached_nand)
+    {
+        node->x += delta.x;
+        node->y += delta.y;
+    }
+
+    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers | ImGuiDragDropFlags_SourceAutoExpirePayload))
+    {
+        draw_list->AddLine(ImVec2(node->x, node->y), ImVec2(pos.x, pos.y), node->active ? yellow : grey, thickness);
+        ImGui::SetDragDropPayload("DND_NODE_PAYLOAD", &node->id, sizeof(uint32_t));
+        ImGui::EndDragDropSource();
+    }
+
+    if (ImGui::BeginDragDropTarget())
+    {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_NODE_PAYLOAD", ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
+        {
+            auto from_node_id = *(uint32_t*)payload->Data;
+            sim.ConnectNodes(from_node_id, node->id);
+        }
+        ImGui::EndDragDropTarget();
+    }
+    ImGui::PopID();
+}
+
+void Window::DrawNAND(nand_t*& nand)
+{
+    auto& io = ImGui::GetIO();
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    auto pos = ImGui::GetMousePos();
+    auto delta = io.MouseDelta;
+    auto draw_nand = [&](float x, float y, bool a = false, bool b = false, bool o = false) {
+      // Legs
+      draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.3f), ImVec2(x + sz * 0.2f, y + sz * 0.3f), a ? yellow : grey, thickness);
+      draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.7f), ImVec2(x + sz * 0.2f, y + sz * 0.7f), b ? yellow : grey, thickness);
+      draw_list->AddLine(ImVec2(x + sz * 0.8f, y + sz * 0.5f), ImVec2(x + sz * 1.0f, y + sz * 0.5f), o ? yellow : grey, thickness);
+
+      // Body
+      draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.2f), ImVec2(x + sz * 0.2f, y + sz * 0.8f), yellow, thickness);
+      draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.2f), ImVec2(x + sz * 0.5f, y + sz * 0.2f), yellow, thickness);
+      draw_list->AddLine(ImVec2(x + sz * 0.5f, y + sz * 0.2f), ImVec2(x + sz * 0.7f, y + sz * 0.3f), yellow, thickness);
+      draw_list->AddLine(ImVec2(x + sz * 0.7f, y + sz * 0.3f), ImVec2(x + sz * 0.8f, y + sz * 0.5f), yellow, thickness);
+      draw_list->AddLine(ImVec2(x + sz * 0.7f, y + sz * 0.7f), ImVec2(x + sz * 0.8f, y + sz * 0.5f), yellow, thickness);
+      draw_list->AddLine(ImVec2(x + sz * 0.5f, y + sz * 0.8f), ImVec2(x + sz * 0.7f, y + sz * 0.7f), yellow, thickness);
+      draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.8f), ImVec2(x + sz * 0.5f, y + sz * 0.8f), yellow, thickness);
+      draw_list->AddCircle(ImVec2(x + sz * 0.8f, y + sz * 0.5f), sz * 0.05f, yellow, 8, thickness * 2);
+    };
+
+    auto bounds_ul = ImVec2(nand->x - 16.0f, nand->y - 16.0f);
+    auto bounds_lr = ImVec2(nand->x + 16.0f, nand->y + 16.0f);
+
+    ImGui::PushID(nand->id);
+
+    auto inputa = sim.GetNode(nand->inputa_id);
+    auto inputb = sim.GetNode(nand->inputb_id);
+    auto output = sim.GetNode(nand->output_id);
+    draw_nand(nand->x, nand->y, inputa->active, inputb->active, output->active);
+
+    ImGui::SetCursorScreenPos(ImVec2(nand->x, nand->y));
+    ImGui::InvisibleButton("nand" + nand->id, ImVec2(64.0f, 64.0f));
+    if (ImGui::IsItemHovered())
+    {
+        draw_list->AddRect(ImVec2(nand->x, nand->y), ImVec2(nand->x + 64.0f, nand->y + 64.0f), yellow);
+        draw_list->AddText(nullptr, 0.0f, ImVec2(nand->x + 64.0f, nand->y + 64.0f), yellow, std::to_string(nand->id).c_str());
+
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        {
+        }
+    }
+
+    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+    {
+        auto delta = io.MouseDelta;
+        nand->x += delta.x;
+        nand->y += delta.y;
+
+        inputa->x = nand->x;
+        inputa->y = nand->y + (64 * 0.3f);
+
+        inputb->x = nand->x;
+        inputb->y = nand->y + (64 * 0.7f);
+
+        output->x = nand->x + 64;
+        output->y = nand->y + 32;
+    }
+    ImGui::PopID();
 }
 
 void Window::Sim()
@@ -372,7 +466,7 @@ void Window::Frame_Toolbar(Simulation& sim)
         {
             if (ImGui::MenuItem("Step"))
             {
-                //sim.Step();
+                sim.Step();
             }
             if (ImGui::MenuItem("Clear"))
             {
@@ -401,7 +495,7 @@ void Window::Frame_Submit()
     SDL_GL_SwapWindow(window);
 }
 
-void Window::CherryTheme()
+void CherryTheme()
 {
     // cherry colors, 3 intensities
 #define HI(v) ImVec4(0.502f, 0.075f, 0.256f, v)

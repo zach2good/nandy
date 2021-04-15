@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 
+#include "circular_buffer_tests.h"
 #include "gate_tests.h"
 
 int main(int argc, char** argv)

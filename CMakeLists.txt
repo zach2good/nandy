@@ -8,11 +8,15 @@ set_property(GLOBAL PROPERTY LINKER_LANGUAGE CXX)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+add_definitions(-DHAVE_LIBC=1)
 
 # CMake adds "/W3" by default on MSVC, remove it.
 # Fixed with CMake 3.15
 if(MSVC)
     string(REGEX REPLACE "/W3[ ]" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Ox /std:c++17")
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Ofast -std=c++17")
 endif()
 
 message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")

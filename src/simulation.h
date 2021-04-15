@@ -6,11 +6,14 @@
 #include <queue>
 #include <unordered_map>
 #include <vector>
+#include <optional>
+#include <unordered_set>
 
 // TODO: Fix includes
 #include "../ext/json/nlohmann/json.hpp"
 
 #include "definitions.h"
+#include "circular_buffer.h"
 
 class Simulation
 {
@@ -20,32 +23,31 @@ public:
 
     void Step();
 
-    std::shared_ptr<nand_t> NewNAND(int x = 0, int y = 0, const std::string& name = "");
-    std::shared_ptr<node_t> NewNode(int x = 0, int y = 0, const std::string& name = "");
+    nand_t* NewNAND(int x = 0, int y = 0, const std::string& name = "");
+    node_t* NewNode(int x = 0, int y = 0, const std::string& name = "");
 
-    std::shared_ptr<nand_t> GetNAND(uint32_t id)
+    nand_t* GetNAND(uint32_t id)
     {
         return nands[id];
     }
 
-    std::shared_ptr<node_t> GetNode(uint32_t id)
+    node_t* GetNode(uint32_t id)
     {
         return nodes[id];
     }
 
-    std::shared_ptr<nand_t> LookupNAND(const std::string& name)
+    nand_t* LookupNAND(std::string name)
     {
         return nand_lookup.find(name) != nand_lookup.end() ? nand_lookup[name] : nullptr;
     }
 
-    std::shared_ptr<node_t> LookupNode(const std::string& name)
+    node_t* LookupNode(std::string name)
     {
         return node_lookup.find(name) != node_lookup.end() ? node_lookup[name] : nullptr;
     }
 
     void ConnectNodes(const uint32_t id0, const uint32_t id1)
     {
-        printf("Connecting: %d -> %d\n", id0, id1);
         auto& n0 = nodes[id0];
         n0->driving_ids.emplace_back(id1);
     };
@@ -53,6 +55,7 @@ public:
     nlohmann::json DumpToJSONObject()
     {
         nlohmann::json j;
+        /*
         for (auto& nand : nands)
         {
             j["nands"][nand->id]["id"] = nand->id;
@@ -82,17 +85,19 @@ public:
         for (auto& entry : nand_lookup)
         {
             auto str = entry.first;
-            auto ptr = entry.second;
-            j["nand_lookup"][str] = ptr->id;
+            auto idx = entry.second;
+            auto& nand = nands[idx];
+            j["nand_lookup"][str] = nand->id;
         }
 
         for (auto& entry : node_lookup)
         {
             auto str = entry.first;
-            auto ptr = entry.second;
-            j["node_lookup"][str] = ptr->id;
+            auto idx = entry.second;
+            auto& node = nands[idx];
+            j["node_lookup"][str] = node->id;
         }
-
+        */
         return j;
     }
 
@@ -110,12 +115,12 @@ public:
         nodes.clear();
         nand_lookup.clear();
         node_lookup.clear();
-
+        /*
         if (j.find("nands") != j.end())
         {
             for (auto& entry : j["nands"])
             {
-                auto nand = std::make_shared<nand_t>();
+                auto nand = std::make_unique<nand_t>();
                 nand->id = entry["id"];
                 nand->x = entry["x"];
                 nand->y = entry["y"];
@@ -125,7 +130,7 @@ public:
                 nand->inputb_id = entry["inputb_id"];
                 nand->output_id = entry["output_id"];
 
-                nands.emplace_back(nand);
+                nands.emplace_back(std::move(nand));
             }
         }
 
@@ -133,7 +138,7 @@ public:
         {
             for (auto& entry : j["nodes"])
             {
-                auto node = std::make_shared<node_t>();
+                auto node = std::make_unique<node_t>();
                 node->id = entry["id"];
                 node->x = entry["x"];
                 node->y = entry["y"];
@@ -145,16 +150,17 @@ public:
                 node->attached_nand = entry["attached_nand"];
                 node->nand_id = entry["nand_id"];
 
-                nodes.emplace_back(node);
+                nodes.emplace_back(std::move(node));
             }
         }
+
 
         if (j.find("nand_lookup") != j.end())
         {
             for (auto& entry : j["nand_lookup"].items())
             {
                 auto str = entry.key();
-                auto id = entry.value();
+                auto idx = entry.value();
                 nand_lookup[str] = GetNAND(id);
             }
         }
@@ -168,6 +174,7 @@ public:
                 node_lookup[str] = GetNode(id);
             }
         }
+        */
     }
 
     void LoadFromJSONFile(const std::string& filename)
@@ -190,6 +197,7 @@ public:
         l.x = x;
         l.y = y;
         l.text = str;
+        l.type = LABEL;
         labels.emplace_back(l);
     }
 
@@ -198,16 +206,18 @@ public:
     long long step_time = 0;
 
     // Component Containers
-    std::vector<std::shared_ptr<nand_t>> nands;
-    std::vector<std::shared_ptr<node_t>> nodes;
-    std::unordered_map<std::string, std::shared_ptr<nand_t>> nand_lookup;
-    std::unordered_map<std::string, std::shared_ptr<node_t>> node_lookup;
+    std::vector<nand_t*> nands;
+    std::vector<node_t*> nodes;
+    std::unordered_map<std::string, nand_t*> nand_lookup;
+    std::unordered_map<std::string, node_t*> node_lookup;
 
     // Components
-    std::shared_ptr<node_t> clk;
+    node_t* clk;
     
     // Simulation
-    std::queue<std::shared_ptr<component_t>> q;
+    circular_buffer_t<component_t*> q;
+    std::size_t queue_ops;
+
 
     // Decorations
     std::vector<label_t> labels;

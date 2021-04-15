@@ -36,3 +36,5 @@ cmake-*/
 .vs/
 .idea/
 build/
+
+bin/
