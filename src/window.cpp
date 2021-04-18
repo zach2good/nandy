@@ -1,9 +1,6 @@
 #include "window.h"
-#include "simulation.h"
 
 #include <cstdio>
-#include <vector>
-#include <iostream>
 
 #include <glad/glad.h>
 
@@ -11,19 +8,10 @@
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl.h"
 
-const ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-const float sz = 64.0f;
-const float thickness = 2.0f;
-const ImU32 red = ImColor(ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
-const ImU32 yellow = ImColor(ImVec4(1.0f, 1.0f, 0.4f, 1.0f));
-const ImU32 grey = ImColor(ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-const ImU32 green = ImColor(ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-
 void CherryTheme();
 
-Window::Window(int w, int h)
-: m_width(w)
-, m_height(h)
+Window::Window()
+: ui(sim)
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
     {
@@ -65,9 +53,7 @@ Window::Window(int w, int h)
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    io.IniFilename = nullptr; 
-    (void)io;
+    ImGui::GetIO().IniFilename = nullptr;
 
     CherryTheme();
 
@@ -105,341 +91,30 @@ void Window::HandleEvents()
             done = true;
         }
     }
+    if (ui.QuitRequested())
+    {
+        done = true;
+    }
+}
+
+void Window::Step()
+{
+    sim.Step();
 }
 
 void Window::Draw()
 {
-    ImGuiIO& io = ImGui::GetIO();
     Frame_Prepare();
 
-    // TODO: Don't hardcode sizes
     ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(m_width, m_height));
+    ImGui::SetNextWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y));
     ImGui::Begin("MAIN_WINDOW", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_MenuBar);
     {
-        Frame_Toolbar(sim);
-
-        ImGui::Text("Step Count: %ld", sim.step_count);
-
-        ImGui::SameLine();
-        ImGui::Text("| Step Time: %lldus", sim.step_time);
-
-        ImGui::SameLine();
-        ImGui::Text("| Queue Ops: %ld", sim.queue_ops);
-
-        ImGui::SameLine();
-        ImGui::Text("| Nodes: %zu", sim.nodes.size());
-
-        ImGui::SameLine();
-        ImGui::Text("| NANDs: %zu", sim.nands.size());
-
-        if (ImGui::Button("Step"))
-        {
-            sim.Step();
-        }
-
-        auto define_c_button = [&](const char* name) {
-            ImGui::SameLine();
-            if (ImGui::Button(name))
-            {
-                auto c = sim.LookupNode(name);
-                if (c)
-                {
-                    c->active = !c->active;
-                }
-                else
-                {
-                    sim.NewNode(300, 300, name);
-                }
-                sim.Step();
-            }
-        };
-        define_c_button("c0");
-        define_c_button("c1");
-        define_c_button("c2");
-        define_c_button("c3");
-        define_c_button("c4");
-        ImGui::SameLine();
-        if (ImGui::Button("Add node"))
-        {
-            sim.NewNode(100, 200);
-        }
-
-        ImGui::SameLine();
-        ImGui::Text("Add label (enter):");
-        ImGui::SameLine();
-        std::array<char, 20> arr{ { 0 } };
-        ImGui::PushItemWidth(128); 
-        if (ImGui::InputText("##", arr.data(), arr.size(), ImGuiInputTextFlags_EnterReturnsTrue))
-        {
-            std::string str(arr.data(), arr.size());
-            sim.AddLabel(200, 200, str);
-        }
-
-        const auto p = ImGui::GetCursorPos();
-
-        // TODO: Define "draw primitives" somewhere else
-        ImDrawList* draw_list = ImGui::GetWindowDrawList();
-        auto draw_nand = [&](float x, float y, bool a = false, bool b = false, bool o = false) {
-            // Legs
-            draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.3f), ImVec2(x + sz * 0.2f, y + sz * 0.3f), a ? yellow : grey, thickness);
-            draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.7f), ImVec2(x + sz * 0.2f, y + sz * 0.7f), b ? yellow : grey, thickness);
-            draw_list->AddLine(ImVec2(x + sz * 0.8f, y + sz * 0.5f), ImVec2(x + sz * 1.0f, y + sz * 0.5f), o ? yellow : grey, thickness);
-
-            // Body
-            draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.2f), ImVec2(x + sz * 0.2f, y + sz * 0.8f), yellow, thickness);
-            draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.2f), ImVec2(x + sz * 0.5f, y + sz * 0.2f), yellow, thickness);
-            draw_list->AddLine(ImVec2(x + sz * 0.5f, y + sz * 0.2f), ImVec2(x + sz * 0.7f, y + sz * 0.3f), yellow, thickness);
-            draw_list->AddLine(ImVec2(x + sz * 0.7f, y + sz * 0.3f), ImVec2(x + sz * 0.8f, y + sz * 0.5f), yellow, thickness);
-            draw_list->AddLine(ImVec2(x + sz * 0.7f, y + sz * 0.7f), ImVec2(x + sz * 0.8f, y + sz * 0.5f), yellow, thickness);
-            draw_list->AddLine(ImVec2(x + sz * 0.5f, y + sz * 0.8f), ImVec2(x + sz * 0.7f, y + sz * 0.7f), yellow, thickness);     
-            draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.8f), ImVec2(x + sz * 0.5f, y + sz * 0.8f), yellow, thickness);
-            draw_list->AddCircle(ImVec2(x + sz * 0.8f, y + sz * 0.5f), sz * 0.05f, yellow, 8, thickness * 2);
-        };
-
-        auto draw_rect = [&](float x, float y) {
-            draw_list->AddRect(ImVec2(x + sz * 0.1f, y + sz * 0.1f), ImVec2(x + sz * 0.9f, y + sz * 0.9f), grey, 10.0f, ImDrawCornerFlags_All, thickness);
-        };
-
-        auto draw_constant_zero = [&](float x, float y) { 
-            draw_rect(x, y);
-            draw_list->AddCircle(ImVec2(x + sz * 0.9f, y + sz * 0.5f), sz * 0.05f, grey, 8, thickness);
-            draw_list->AddText(nullptr, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), grey, "0");
-        };
-
-        auto draw_constant_one = [&](float x, float y) {
-            draw_rect(x, y);
-            draw_list->AddCircle(ImVec2(x + sz * 0.9f, y + sz * 0.5f), sz * 0.05f, grey, 8, thickness);
-            draw_list->AddText(nullptr, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), yellow, "1");
-        };
-
-        auto draw_probe = [&](float x, float y, bool active) {
-            draw_list->AddCircle(ImVec2(x + sz * 0.5f, y + sz * 0.5f), sz * 0.5f, grey, 16, thickness);
-            draw_list->AddCircle(ImVec2(x + sz * 0.0f, y + sz * 0.5f), sz * 0.05f, grey, 8, thickness);
-            draw_list->AddText(nullptr, 20.0f, ImVec2(x + sz * 0.4f, y + sz * 0.3f), active ? yellow : grey, active ? "1" : "0");
-        };
-
-        // TODO: Make this DND!
-        // NAND Button
-        draw_nand(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y);
-        if (ImGui::Button("##DND_NAND", ImVec2(sz, sz)))
-        {
-            static uint32_t nand_label_id = 0;
-            sim.NewNAND(300, 300, std::to_string(nand_label_id++));
-        }
-
-        // Drawing/Canvas area       
-        ImVec2 canvas_pos = ImGui::GetCursorScreenPos();     // ImDrawList API uses screen coordinates!
-        ImVec2 canvas_size = ImGui::GetContentRegionAvail(); // Resize canvas to what's available
-
-        draw_list->AddRect(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), IM_COL32(255, 255, 255, 255));
-
-        // Draw Simulation items
-        auto delta = io.MouseDelta;
-        auto pos = ImGui::GetMousePos();
-
-        // Build draw lists
-        std::vector<nand_t*> drawable_nands;
-        std::vector<node_t*> drawable_nodes;
-        for (auto& nand : sim.nands)
-        {
-            // Don't bother drawing offscreen things!
-            auto bounds_ul = ImVec2(nand->x - 16.0f, nand->y - 16.0f);
-            auto bounds_lr = ImVec2(nand->x + 16.0f, nand->y + 16.0f);
-            if (bounds_ul.x < 0.0f || bounds_ul.x > m_width ||
-                bounds_ul.y < 0.0f || bounds_ul.y > m_height)
-            {
-                continue;
-            }
-            drawable_nands.emplace_back(nand);
-        }
-
-        for (auto& node : sim.nodes)
-        {
-            // Don't bother drawing offscreen things!
-            auto bounds_ul = ImVec2(node->x - 16.0f, node->y - 16.0f);
-            auto bounds_lr = ImVec2(node->x + 16.0f, node->y + 16.0f);
-            if (bounds_ul.x < 0.0f || bounds_ul.x > m_width ||
-                bounds_ul.y < 0.0f || bounds_ul.y > m_height)
-            {
-                continue;
-            }
-            drawable_nodes.emplace_back(node);
-        }
-
-        for (auto& nand : drawable_nands)
-        {
-            DrawNAND(nand);
-        }
-
-        for (auto& node : drawable_nodes)
-        {
-            DrawNode(node);
-        }
-
-        for (auto& entry : sim.nand_lookup)
-        {
-            auto str = entry.first;
-            auto nand = entry.second;
-            DrawNAND(nand);
-        }
-
-        for (auto& entry : sim.node_lookup)
-        {
-            auto str = entry.first;
-            auto node = entry.second;
-            DrawNode(node);
-            draw_list->AddText(nullptr, 0.0f, ImVec2(node->x, node->y - 16.0f), yellow, str.c_str());
-        }
-
-        for (auto& label : sim.labels)
-        {
-            ImGui::SetCursorScreenPos(ImVec2(label.x, label.y));
-            ImGui::Text(label.text.c_str());
-            auto rect = ImGui::GetItemRectSize();
-            if (ImGui::IsMouseHoveringRect(ImVec2(label.x, label.y), ImVec2(label.x + rect.x, label.y + rect.y)))
-            {
-                draw_list->AddRect(ImVec2(label.x, label.y), ImVec2(label.x + rect.x, label.y + rect.y), yellow);
-                if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-                {
-                    label.x += delta.x;
-                    label.y += delta.y;
-                }
-            }
-        }
-
-        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-        {
-            sim.DumpJSONObjectToFile(sim.DumpToJSONObject(), "dump.json");
-        }
+        ui.Draw(sim);
+        ImGui::End();
     }
-    ImGui::End();
 
     Frame_Submit();
-}
-void Window::DrawNode(node_t*& node)
-{
-    auto& io = ImGui::GetIO();
-    ImDrawList* draw_list = ImGui::GetWindowDrawList();
-    auto pos = ImGui::GetMousePos();
-    auto delta = io.MouseDelta;
-    auto bounds_ul = ImVec2(node->x - 16.0f, node->y - 16.0f);
-    auto bounds_lr = ImVec2(node->x + 16.0f, node->y + 16.0f);
-
-    ImGui::PushID(node->id);
-
-    draw_list->AddText(nullptr, 0.0f, ImVec2(node->x, node->y), node->active ? yellow : grey, node->active ? "1" : "0");
-    for (auto& driven_id : node->driving_ids)
-    {
-        auto driven = sim.GetNode(driven_id);
-        draw_list->AddLine(ImVec2(node->x, node->y), ImVec2(driven->x, driven->y), node->active ? yellow : grey, thickness);
-    }
-
-    ImGui::SetCursorScreenPos(ImVec2(node->x - 16.0f, node->y - 16.0f));
-    ImGui::InvisibleButton("node" + node->id, ImVec2(32.0f, 32.0f));
-
-    if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr))
-    {
-        draw_list->AddRect(ImVec2(node->x - 16.0f, node->y - 16.0f), ImVec2(node->x + 16.0f, node->y + 16.0f), yellow);
-        draw_list->AddText(nullptr, 0.0f, ImVec2(node->x + 16.0f, node->y + 16.0f), yellow, std::to_string(node->id).c_str());
-
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Middle) || ImGui::IsKeyPressed(ImGuiKey_Backspace))
-        {
-            node->driving_ids.clear();
-        }
-    }
-
-    if (ImGui::IsMouseHoveringRect(bounds_ul, bounds_lr) && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && !node->attached_nand)
-    {
-        node->x += delta.x;
-        node->y += delta.y;
-    }
-
-    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers | ImGuiDragDropFlags_SourceAutoExpirePayload))
-    {
-        draw_list->AddLine(ImVec2(node->x, node->y), ImVec2(pos.x, pos.y), node->active ? yellow : grey, thickness);
-        ImGui::SetDragDropPayload("DND_NODE_PAYLOAD", &node->id, sizeof(uint32_t));
-        ImGui::EndDragDropSource();
-    }
-
-    if (ImGui::BeginDragDropTarget())
-    {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_NODE_PAYLOAD", ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
-        {
-            auto from_node_id = *(uint32_t*)payload->Data;
-            sim.ConnectNodes(from_node_id, node->id);
-        }
-        ImGui::EndDragDropTarget();
-    }
-    ImGui::PopID();
-}
-
-void Window::DrawNAND(nand_t*& nand)
-{
-    auto& io = ImGui::GetIO();
-    ImDrawList* draw_list = ImGui::GetWindowDrawList();
-    auto pos = ImGui::GetMousePos();
-    auto delta = io.MouseDelta;
-    auto draw_nand = [&](float x, float y, bool a = false, bool b = false, bool o = false) {
-      // Legs
-      draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.3f), ImVec2(x + sz * 0.2f, y + sz * 0.3f), a ? yellow : grey, thickness);
-      draw_list->AddLine(ImVec2(x + sz * 0.0f, y + sz * 0.7f), ImVec2(x + sz * 0.2f, y + sz * 0.7f), b ? yellow : grey, thickness);
-      draw_list->AddLine(ImVec2(x + sz * 0.8f, y + sz * 0.5f), ImVec2(x + sz * 1.0f, y + sz * 0.5f), o ? yellow : grey, thickness);
-
-      // Body
-      draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.2f), ImVec2(x + sz * 0.2f, y + sz * 0.8f), yellow, thickness);
-      draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.2f), ImVec2(x + sz * 0.5f, y + sz * 0.2f), yellow, thickness);
-      draw_list->AddLine(ImVec2(x + sz * 0.5f, y + sz * 0.2f), ImVec2(x + sz * 0.7f, y + sz * 0.3f), yellow, thickness);
-      draw_list->AddLine(ImVec2(x + sz * 0.7f, y + sz * 0.3f), ImVec2(x + sz * 0.8f, y + sz * 0.5f), yellow, thickness);
-      draw_list->AddLine(ImVec2(x + sz * 0.7f, y + sz * 0.7f), ImVec2(x + sz * 0.8f, y + sz * 0.5f), yellow, thickness);
-      draw_list->AddLine(ImVec2(x + sz * 0.5f, y + sz * 0.8f), ImVec2(x + sz * 0.7f, y + sz * 0.7f), yellow, thickness);
-      draw_list->AddLine(ImVec2(x + sz * 0.2f, y + sz * 0.8f), ImVec2(x + sz * 0.5f, y + sz * 0.8f), yellow, thickness);
-      draw_list->AddCircle(ImVec2(x + sz * 0.8f, y + sz * 0.5f), sz * 0.05f, yellow, 8, thickness * 2);
-    };
-
-    auto bounds_ul = ImVec2(nand->x - 16.0f, nand->y - 16.0f);
-    auto bounds_lr = ImVec2(nand->x + 16.0f, nand->y + 16.0f);
-
-    ImGui::PushID(nand->id);
-
-    auto inputa = sim.GetNode(nand->inputa_id);
-    auto inputb = sim.GetNode(nand->inputb_id);
-    auto output = sim.GetNode(nand->output_id);
-    draw_nand(nand->x, nand->y, inputa->active, inputb->active, output->active);
-
-    ImGui::SetCursorScreenPos(ImVec2(nand->x, nand->y));
-    ImGui::InvisibleButton("nand" + nand->id, ImVec2(64.0f, 64.0f));
-    if (ImGui::IsItemHovered())
-    {
-        draw_list->AddRect(ImVec2(nand->x, nand->y), ImVec2(nand->x + 64.0f, nand->y + 64.0f), yellow);
-        draw_list->AddText(nullptr, 0.0f, ImVec2(nand->x + 64.0f, nand->y + 64.0f), yellow, std::to_string(nand->id).c_str());
-
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        {
-        }
-    }
-
-    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-    {
-        auto delta = io.MouseDelta;
-        nand->x += delta.x;
-        nand->y += delta.y;
-
-        inputa->x = nand->x;
-        inputa->y = nand->y + (64 * 0.3f);
-
-        inputb->x = nand->x;
-        inputb->y = nand->y + (64 * 0.7f);
-
-        output->x = nand->x + 64;
-        output->y = nand->y + 32;
-    }
-    ImGui::PopID();
-}
-
-void Window::Sim()
-{
-    sim.Step();
 }
 
 void Window::Frame_Prepare()
@@ -449,49 +124,19 @@ void Window::Frame_Prepare()
     ImGui::NewFrame();
 }
 
-void Window::Frame_Toolbar(Simulation& sim)
-{
-    if (ImGui::BeginMenuBar())
-    {
-        if (ImGui::BeginMenu("File"))
-        {
-            if (ImGui::MenuItem("Exit"))
-            {
-                done = true;
-            }
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("Simulation"))
-        {
-            if (ImGui::MenuItem("Step"))
-            {
-                sim.Step();
-            }
-            if (ImGui::MenuItem("Clear"))
-            {
-                sim.step_count = 0;
-                sim.step_time = 0;
-                sim.nands.clear();
-                sim.nodes.clear();
-                sim.nand_lookup.clear();
-                sim.node_lookup.clear();
-                sim.labels.clear();
-            }
-            ImGui::EndMenu();
-        }
-        ImGui::EndMenuBar();
-    }
-}
-
 void Window::Frame_Submit()
 {
-    ImGui::Render();
-    ImGuiIO& io = ImGui::GetIO();
-    glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+    int display_w, display_h;
+    SDL_GetWindowSize(window, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+
+    const ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
+
+    ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
     SDL_GL_SwapWindow(window);
 }
 

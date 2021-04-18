@@ -113,8 +113,8 @@ nand_t* Simulation::NewNAND(int x, int y, const std::string& name)
     inputb->attached_nand = true;
     inputb->nand_id = nand->id;
 
-    //output->attached_nand = true;
-    //output->nand_id = nand->id;
+    output->attached_nand = true;
+    output->nand_id = nand->id;
 
     nand->inputa_id = inputa->id;
     nand->inputb_id = inputb->id;

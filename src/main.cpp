@@ -7,7 +7,7 @@ int main(int argc, char* argv[])
     constexpr std::chrono::nanoseconds time_step(30ms);
     using clock = std::chrono::high_resolution_clock;
 
-    Window window(1280, 720);
+    Window window;
 
     while (!window.QuitRequested())
     {
@@ -17,7 +17,7 @@ int main(int argc, char* argv[])
         while (time_now < next_step)
         {
             window.HandleEvents();
-            window.Sim();
+            window.Step();
 
             time_now = clock::now();
         }
